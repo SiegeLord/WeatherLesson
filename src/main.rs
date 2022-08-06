@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 #![feature(backtrace)]
 
-//~ mod atlas;
+mod atlas;
 //~ mod character_sprite_sheet;
 mod components;
 mod controls;

@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::game_state::GameState;
-use crate::utils;
+use crate::{atlas, utils};
 use allegro::*;
 use na::Point2;
 use nalgebra as na;
@@ -22,58 +22,56 @@ struct SpriteDesc
 pub struct Sprite
 {
 	desc: SpriteDesc,
+	variants: Vec<atlas::AtlasBitmap>,
 }
 
 impl Sprite
 {
-	pub fn load(sprite: &str, state: &mut GameState) -> Result<Sprite>
+	pub fn load(sprite: &str, core: &Core, atlas: &mut atlas::Atlas) -> Result<Sprite>
 	{
 		let desc: SpriteDesc = utils::load_config(sprite)?;
-		state.cache_bitmap(&desc.bitmap)?;
-		Ok(Sprite { desc: desc })
+
+		let old_flags = core.get_new_bitmap_flags();
+		core.set_new_bitmap_flags(MEMORY_BITMAP);
+		let bitmap = utils::load_bitmap(&core, &desc.bitmap)?;
+		core.set_new_bitmap_flags(old_flags);
+
+		let num_variants = bitmap.get_height() / desc.height;
+		let mut variants = Vec::with_capacity(num_variants as usize);
+		for i in 0..num_variants
+		{
+			variants.push(
+				atlas.insert(
+					&core,
+					&*bitmap
+						.create_sub_bitmap(0, i * desc.height, desc.width, desc.height)
+						.map_err(|_| "Couldn't create sub-bitmap?".to_string())?
+						.upgrade()
+						.unwrap(),
+				)?,
+			)
+		}
+		Ok(Sprite {
+			desc: desc,
+			variants: variants,
+		})
 	}
 
 	pub fn draw(&self, pos: Point2<f32>, variant: i32, tint: Color, state: &GameState)
 	{
-		let bitmap = state.get_bitmap(&self.desc.bitmap).unwrap();
-
 		let w = self.desc.width as f32;
 		let h = self.desc.height as f32;
+		let atlas_bmp = &self.variants[variant as usize];
 
 		state.core.draw_tinted_bitmap_region(
-			bitmap,
+			&state.atlas.pages[atlas_bmp.page].bitmap,
 			tint,
-			0.,
-			variant as f32 * h,
+			atlas_bmp.start.x,
+			atlas_bmp.start.y,
 			w,
 			h,
 			pos.x - self.desc.center_x as f32,
 			pos.y - self.desc.center_y as f32,
-			Flag::zero(),
-		);
-	}
-
-	pub fn draw_beam(&self, pos: Point2<f32>, variant: i32, len: f32, theta: f32, state: &GameState)
-	{
-		let bitmap = state.get_bitmap(&self.desc.bitmap).unwrap();
-
-		//~ let w = self.desc.width as f32;
-		let h = self.desc.height as f32;
-
-		state.core.draw_tinted_scaled_rotated_bitmap_region(
-			bitmap,
-			0.,
-			variant as f32 * h,
-			len,
-			h,
-			Color::from_rgb_f(1., 1., 1.),
-			len / 2.,
-			h / 2.,
-			pos.x,
-			pos.y,
-			1.,
-			1.,
-			theta,
 			Flag::zero(),
 		);
 	}

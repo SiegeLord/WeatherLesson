@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::{components as comps, controls, game_state, sprite, utils};
+use crate::{atlas, components as comps, controls, game_state, sprite, utils};
 
 use allegro::*;
 use na::{
@@ -293,7 +293,7 @@ fn spawn_player(
 		},
 		comps::FixedEngine { power: 1.5 },
 		comps::Drawable {
-			sprite: sprite::Sprite::load("data/plane.cfg", state)?,
+			sprite: "data/plane.cfg".to_string(),
 		},
 		comps::CastsShadow,
 	)))
@@ -331,7 +331,6 @@ pub struct Map
 	size: i32,
 	display_width: f32,
 	display_height: f32,
-	tiles: sprite::Sprite,
 	camera_pos: Point3<f32>,
 	world: hecs::World,
 	player: hecs::Entity,
@@ -354,12 +353,14 @@ impl Map
 		let player_pos = Point3::new(0., 2., 10.);
 		let player = spawn_player(player_pos, 0., &mut world, state)?;
 
+		state.cache_sprite("data/terrain.cfg")?;
+		state.cache_sprite("data/plane.cfg")?;
+
 		Ok(Self {
 			heightmap: smooth_heightmap(&diamond_square(size)),
 			size: 2i32.pow(size as u32) + 1,
 			display_width: display_width,
 			display_height: display_height,
-			tiles: sprite::Sprite::load("data/terrain.cfg", state)?,
 			camera_pos: player_pos,
 			world: world,
 			player: player,
@@ -447,6 +448,7 @@ impl Map
 
 		let dx = self.display_width / 2. - camera_xy.x;
 		let dy = self.display_height / 2. - camera_xy.y;
+		let tiles = state.get_sprite("data/terrain.cfg").unwrap();
 		for y in 0..self.size - 1
 		{
 			for x in 0..self.size - 1
@@ -471,7 +473,7 @@ impl Map
 
 				let variant = decode_tile(vals, x, y);
 				let xy = world_to_screen(Point3::new(x as f32, y as f32, min_val as f32));
-				self.tiles.draw(
+				tiles.draw(
 					xy - utils::Vec2D::new(64. - dx, 96. - dy),
 					variant,
 					Color::from_rgb_f(1., 1., 1.),
@@ -511,7 +513,9 @@ impl Map
 					+ num_orientations / 4)
 					% num_orientations)
 				% num_orientations;
-			drawable.sprite.draw(
+
+			let sprite = state.get_sprite(&drawable.sprite).unwrap();
+			sprite.draw(
 				xy + Vector2::new(dx, dy),
 				variant,
 				Color::from_rgb_f(1., 1., 1.),

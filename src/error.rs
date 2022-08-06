@@ -20,6 +20,11 @@ impl Error
 			backtrace: Backtrace::capture(),
 		}
 	}
+
+	pub fn context(self, message: String) -> Self
+	{
+		Error::new(message, Some(Box::new(self)))
+	}
 }
 
 impl From<String> for Error

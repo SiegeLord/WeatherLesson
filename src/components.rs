@@ -28,5 +28,5 @@ pub struct CastsShadow;
 #[derive(Debug, Clone)]
 pub struct Drawable
 {
-	pub sprite: sprite::Sprite,
+	pub sprite: String,
 }
