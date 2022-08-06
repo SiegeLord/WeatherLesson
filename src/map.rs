@@ -9,9 +9,10 @@ use na::{
 use nalgebra as na;
 use rand::prelude::*;
 
-fn decode_tile(vals: [i32; 4], x: i32, y: i32) -> i32
+fn decode_tile(vals: [i32; 4], x: i32, y: i32, z: i32) -> i32
 {
-	match vals
+	let offt = if z == 0 { 21 } else { 0 };
+	offt + match vals
 	{
 		//~ [0, 0, 0, 0] => rng.gen_range(0..3),
 		[1, 0, 0, 0] => 3,
@@ -89,7 +90,7 @@ fn diamond_square(size: i32) -> Vec<i32>
 	let mut heightmap = vec![-1i32; (real_size * real_size) as usize];
 	let mut rng = thread_rng();
 	let seed: u64 = rng.gen();
-	//~ let seed = 11961432304471787294;
+	//~ let seed = 13207773306860755903;
 	dbg!(seed);
 	let mut rng = StdRng::seed_from_u64(seed);
 
@@ -238,7 +239,6 @@ fn diamond_square(size: i32) -> Vec<i32>
 			}
 		}
 	}
-	print_heightmap(&heightmap);
 	heightmap
 }
 
@@ -269,6 +269,21 @@ fn smooth_heightmap(heightmap: &[i32]) -> Vec<i32>
 			}
 			res[(x + y * real_size) as usize] = mean_height as i32;
 		}
+	}
+	res
+}
+
+fn lower_heightmap(heightmap: &[i32]) -> Vec<i32>
+{
+	let mut min_height = 1000;
+	for v in heightmap
+	{
+		min_height = utils::min(*v, min_height);
+	}
+	let mut res = heightmap.to_vec();
+	for v in &mut res
+	{
+		*v -= min_height;
 	}
 	res
 }
@@ -424,8 +439,11 @@ impl Map
 		state.cache_sprite("data/plane.cfg")?;
 		state.cache_sprite("data/engine_particles.cfg")?;
 
+		let heightmap = lower_heightmap(&smooth_heightmap(&diamond_square(size)));
+		print_heightmap(&heightmap);
+
 		Ok(Self {
-			heightmap: smooth_heightmap(&diamond_square(size)),
+			heightmap: heightmap,
 			size: 2i32.pow(size as u32) + 1,
 			display_width: display_width,
 			display_height: display_height,
@@ -589,7 +607,7 @@ impl Map
 					*v -= min_val;
 				}
 
-				let variant = decode_tile(vals, x, y);
+				let variant = decode_tile(vals, x, y, min_val);
 				let xy = world_to_screen(Point3::new(x as f32, y as f32, min_val as f32));
 				tiles.draw(
 					utils::round_point(xy - utils::Vec2D::new(64. - dx, 96. - dy)),
