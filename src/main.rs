@@ -6,7 +6,7 @@
 //~ mod atlas;
 //~ mod character_sprite_sheet;
 mod components;
-//~ mod controls;
+mod controls;
 mod error;
 mod game_state;
 mod map;

@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::{game_state, sprite, utils};
+use crate::{components as comps, controls, game_state, sprite, utils};
 
 use allegro::*;
 use na::{
@@ -14,7 +14,6 @@ fn decode_tile(vals: [i32; 4], x: i32, y: i32) -> i32
 	match vals
 	{
 		//~ [0, 0, 0, 0] => rng.gen_range(0..3),
-
 		[1, 0, 0, 0] => 3,
 		[0, 1, 0, 0] => 4,
 		[0, 0, 1, 0] => 5,
@@ -37,7 +36,8 @@ fn decode_tile(vals: [i32; 4], x: i32, y: i32) -> i32
 		[1, 0, 1, 0] => 18,
 		[0, 0, 1, 1] => 19,
 		[0, 1, 0, 1] => 20,
-		_ => {
+		_ =>
+		{
 			let mut rng = StdRng::seed_from_u64((x + 10000 * y) as u64);
 			rng.gen_range(0..3)
 		}
@@ -252,8 +252,6 @@ fn smooth_heightmap(heightmap: &[i32]) -> Vec<i32>
 		{
 			let mut mean_height = 0.;
 			let mut count = 0;
-			//~ println!();
-			// Check the diag corners
 			for sy in [-1, 1]
 			{
 				for sx in [-1, 1]
@@ -263,8 +261,8 @@ fn smooth_heightmap(heightmap: &[i32]) -> Vec<i32>
 					if cx >= 0 && cy >= 0 && cx < real_size && cy < real_size
 					{
 						let val = heightmap[(cx + cy * real_size) as usize];
-						mean_height = (mean_height * count as f32 + val as f32)
-							/ (count + 1) as f32;
+						mean_height =
+							(mean_height * count as f32 + val as f32) / (count + 1) as f32;
 						count += 1;
 					}
 				}
@@ -275,12 +273,56 @@ fn smooth_heightmap(heightmap: &[i32]) -> Vec<i32>
 	res
 }
 
-fn world_to_screen(pos: Vector3<f32>) -> Vector2<f32>
+fn world_to_screen(pos: Point3<f32>) -> Point2<f32>
 {
-	Vector2::new(
+	Point2::new(
 		pos.x as f32 * 64. - pos.y as f32 * 64.,
 		pos.x * 32. + pos.y * 32. - pos.z * 24.,
 	)
+}
+
+fn spawn_player(
+	pos: Point3<f32>, dir: f32, world: &mut hecs::World, state: &mut game_state::GameState,
+) -> Result<hecs::Entity>
+{
+	Ok(world.spawn((
+		comps::Position { pos: pos, dir: dir },
+		comps::Velocity {
+			vel: Vector3::zeros(),
+			dir_vel: 0.,
+		},
+		comps::FixedEngine { power: 1.5 },
+		comps::Drawable {
+			sprite: sprite::Sprite::load("data/plane.cfg", state)?,
+		},
+		comps::CastsShadow,
+	)))
+}
+
+fn get_height(heightmap: &[i32], pos: Point2<f32>) -> Option<f32>
+{
+	let size = (heightmap.len() as f32).sqrt() as i32;
+	let x = (pos.x + 0.5) as i32;
+	let y = (pos.y + 0.5) as i32;
+	let fx = 0.5 + pos.x - x as f32;
+	let fy = 0.5 + pos.y - y as f32;
+
+	if x >= 0 && y >= 0 && x + 1 < size && y + 1 < size
+	{
+		let h00 = heightmap[((x + 0) + (y + 0) * size) as usize] as f32;
+		let h01 = heightmap[((x + 0) + (y + 1) * size) as usize] as f32;
+		let h10 = heightmap[((x + 1) + (y + 0) * size) as usize] as f32;
+		let h11 = heightmap[((x + 1) + (y + 1) * size) as usize] as f32;
+
+		let h0 = (1. - fy) * h00 + fy * h01;
+		let h1 = (1. - fy) * h10 + fy * h11;
+
+		Some((1. - fx) * h0 + fx * h1)
+	}
+	else
+	{
+		None
+	}
 }
 
 pub struct Map
@@ -290,7 +332,14 @@ pub struct Map
 	display_width: f32,
 	display_height: f32,
 	tiles: sprite::Sprite,
-	camera_pos: utils::Vec2D,
+	camera_pos: Point3<f32>,
+	world: hecs::World,
+	player: hecs::Entity,
+
+	up_state: bool,
+	down_state: bool,
+	left_state: bool,
+	right_state: bool,
 }
 
 impl Map
@@ -300,13 +349,24 @@ impl Map
 	) -> Result<Self>
 	{
 		let size = 5;
+		let mut world = hecs::World::default();
+
+		let player_pos = Point3::new(0., 2., 10.);
+		let player = spawn_player(player_pos, 0., &mut world, state)?;
+
 		Ok(Self {
 			heightmap: smooth_heightmap(&diamond_square(size)),
 			size: 2i32.pow(size as u32) + 1,
 			display_width: display_width,
 			display_height: display_height,
 			tiles: sprite::Sprite::load("data/terrain.cfg", state)?,
-			camera_pos: utils::Vec2D::zeros(),
+			camera_pos: player_pos,
+			world: world,
+			player: player,
+			up_state: false,
+			down_state: false,
+			left_state: false,
+			right_state: false,
 		})
 	}
 
@@ -314,6 +374,39 @@ impl Map
 		&mut self, state: &mut game_state::GameState,
 	) -> Result<Option<game_state::NextScreen>>
 	{
+		// Player input.
+		let left_right = self.left_state as i32 - (self.right_state as i32);
+		let up_down = self.up_state as i32 - (self.down_state as i32);
+		if let Ok(mut vel) = self.world.get::<&mut comps::Velocity>(self.player)
+		{
+			vel.dir_vel = -left_right as f32 * 1.;
+			vel.vel.z = up_down as f32 * 2.;
+		}
+
+		// Camera.
+		if let Ok(pos) = self.world.get::<&comps::Position>(self.player)
+		{
+			self.camera_pos = pos.pos;
+		}
+
+		// Fixed engine.
+		for (id, (pos, eng, vel)) in
+			self.world
+				.query_mut::<(&comps::Position, &comps::FixedEngine, &mut comps::Velocity)>()
+		{
+			let dir_vel = Rotation2::new(pos.dir) * Vector2::new(1., 0.);
+			vel.vel = eng.power * Vector3::new(dir_vel.x, dir_vel.y, vel.vel.z);
+		}
+
+		// Velocity.
+		for (id, (pos, vel)) in self
+			.world
+			.query_mut::<(&mut comps::Position, &comps::Velocity)>()
+		{
+			pos.pos += utils::DT * vel.vel;
+			pos.dir += utils::DT * vel.dir_vel;
+		}
+
 		Ok(None)
 	}
 
@@ -321,39 +414,39 @@ impl Map
 		&mut self, event: &Event, state: &mut game_state::GameState,
 	) -> Result<Option<game_state::NextScreen>>
 	{
-		match event
+		if let Some((down, action)) = state.options.controls.decode_event(event)
 		{
-			Event::KeyDown { keycode, .. } => match keycode
+			match action
 			{
-				KeyCode::Left =>
+				controls::Action::MoveForward =>
 				{
-					self.camera_pos.x -= 16.;
+					self.up_state = down;
 				}
-				KeyCode::Right =>
+				controls::Action::MoveBackward =>
 				{
-					self.camera_pos.x += 16.;
+					self.down_state = down;
 				}
-				KeyCode::Up =>
+				controls::Action::TurnLeft =>
 				{
-					self.camera_pos.y -= 16.;
+					self.left_state = down;
 				}
-				KeyCode::Down =>
+				controls::Action::TurnRight =>
 				{
-					self.camera_pos.y += 16.;
+					self.right_state = down;
 				}
-				_ => (),
-			},
-			_ => (),
+			}
 		}
 		Ok(None)
 	}
 
-	pub fn draw(&self, state: &game_state::GameState) -> Result<()>
+	pub fn draw(&mut self, state: &game_state::GameState) -> Result<()>
 	{
 		state.core.clear_to_color(Color::from_rgb_f(0., 0., 0.));
 
-		let dx = self.display_width / 2. - self.camera_pos.x;
-		let dy = self.display_height / 2. - self.camera_pos.y;
+		let camera_xy = world_to_screen(self.camera_pos);
+
+		let dx = self.display_width / 2. - camera_xy.x;
+		let dy = self.display_height / 2. - camera_xy.y;
 		for y in 0..self.size - 1
 		{
 			for x in 0..self.size - 1
@@ -377,28 +470,55 @@ impl Map
 				}
 
 				let variant = decode_tile(vals, x, y);
-				let xy = world_to_screen(Vector3::new(x as f32, y as f32, min_val as f32));
+				let xy = world_to_screen(Point3::new(x as f32, y as f32, min_val as f32));
 				self.tiles.draw(
 					xy - utils::Vec2D::new(64. - dx, 96. - dy),
 					variant,
 					Color::from_rgb_f(1., 1., 1.),
 					state,
 				);
-
-				//~ let xy = world_to_screen(Vector3::new(
-					//~ x as f32,
-					//~ y as f32,
-					//~ min_val as f32 + vals.iter().sum::<i32>() as f32 / 4.,
-				//~ ));
-
-				//~ state.prim.draw_filled_circle(
-					//~ dx + xy.x,
-					//~ dy + xy.y,
-					//~ 16.,
-					//~ Color::from_rgb_f(1., 0.6, 0.6),
-				//~ );
 			}
 		}
+
+		for (id, (pos, _)) in self
+			.world
+			.query::<(&comps::Position, &comps::CastsShadow)>()
+			.iter()
+		{
+			if let Some(h) = get_height(&self.heightmap, pos.pos.xy())
+			{
+				let xy = world_to_screen(Point3::new(pos.pos.x, pos.pos.y, h));
+
+				state.prim.draw_filled_ellipse(
+					dx + xy.x,
+					dy + xy.y,
+					16.,
+					8.,
+					Color::from_rgba_f(0., 0., 0., 0.4),
+				);
+			}
+		}
+		for (id, (pos, drawable)) in self
+			.world
+			.query::<(&comps::Position, &comps::Drawable)>()
+			.iter()
+		{
+			let xy = world_to_screen(pos.pos);
+			let num_orientations = 8;
+			let window_size = 2. * f32::pi() / num_orientations as f32;
+			let variant = (num_orientations
+				- (((pos.dir + f32::pi() + window_size / 2.) / window_size) as i32
+					+ num_orientations / 4)
+					% num_orientations)
+				% num_orientations;
+			drawable.sprite.draw(
+				xy + Vector2::new(dx, dy),
+				variant,
+				Color::from_rgb_f(1., 1., 1.),
+				state,
+			);
+		}
+
 		Ok(())
 	}
 }

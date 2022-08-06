@@ -1,7 +1,6 @@
 use crate::error::Result;
 //~ use crate::sfx::Sfx;
-use crate::utils;
-use crate::utils::{load_bitmap, Vec2D, DT};
+use crate::{controls, utils};
 use allegro::*;
 use allegro_font::*;
 use allegro_image::*;
@@ -23,7 +22,7 @@ pub struct Options
 	pub sfx_volume: f32,
 	pub music_volume: f32,
 	//~ pub turn_sensitivity: f32,
-	//~ pub controls: controls::Controls,
+	pub controls: controls::Controls,
 }
 
 pub enum NextScreen
@@ -126,7 +125,7 @@ impl GameState
 		Ok(match self.bitmaps.entry(name.to_string())
 		{
 			Entry::Occupied(o) => o.into_mut(),
-			Entry::Vacant(v) => v.insert(load_bitmap(&self.core, name)?),
+			Entry::Vacant(v) => v.insert(utils::load_bitmap(&self.core, name)?),
 		})
 	}
 
@@ -159,6 +158,6 @@ impl GameState
 
 	pub fn time(&self) -> f64
 	{
-		self.tick as f64 * DT as f64
+		self.tick as f64 * utils::DT as f64
 	}
 }
