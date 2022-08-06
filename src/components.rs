@@ -26,7 +26,44 @@ pub struct FixedEngine
 pub struct CastsShadow;
 
 #[derive(Debug, Clone)]
+pub enum DrawableKind
+{
+	Oriented
+	{
+		sprite: String
+	},
+	Animated
+	{
+		sprite: String,
+		start_time: f64,
+		total_duration: f64,
+	},
+}
+
+#[derive(Debug, Clone)]
 pub struct Drawable
 {
+	pub kind: DrawableKind,
+}
+
+#[derive(Debug, Clone)]
+pub struct TimeToDie
+{
+	pub time_to_die: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParticleSpawner
+{
+	pub offset: Vector3<f32>,
+	pub spawn_delay: f64,
+	pub time_to_spawn: f64,
+	pub duration: f64,
 	pub sprite: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParticleSpawners
+{
+	pub spawners: Vec<ParticleSpawner>,
 }

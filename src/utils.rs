@@ -113,6 +113,11 @@ pub fn clamp<T: PartialOrd>(x: T, min: T, max: T) -> T
 	}
 }
 
+pub fn round_point(vec: Point2<f32>) -> Point2<f32>
+{
+	Point2::new(vec.x.round(), vec.y.round())
+}
+
 pub fn sigmoid(x: f32) -> f32
 {
 	1. / (1. + (-x).exp())

@@ -281,11 +281,9 @@ fn world_to_screen(pos: Point3<f32>) -> Point2<f32>
 	)
 }
 
-fn spawn_player(
-	pos: Point3<f32>, dir: f32, world: &mut hecs::World, state: &mut game_state::GameState,
-) -> Result<hecs::Entity>
+fn spawn_player(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::Entity
 {
-	Ok(world.spawn((
+	world.spawn((
 		comps::Position { pos: pos, dir: dir },
 		comps::Velocity {
 			vel: Vector3::zeros(),
@@ -293,10 +291,67 @@ fn spawn_player(
 		},
 		comps::FixedEngine { power: 1.5 },
 		comps::Drawable {
-			sprite: "data/plane.cfg".to_string(),
+			kind: comps::DrawableKind::Oriented {
+				sprite: "data/plane.cfg".to_string(),
+			},
+		},
+		comps::ParticleSpawners {
+			spawners: vec![
+				comps::ParticleSpawner {
+					offset: Vector3::new(-0.3, 0.2, -0.4),
+					spawn_delay: 0.15,
+					time_to_spawn: 0.,
+					duration: 1.,
+					sprite: "data/engine_particles.cfg".to_string(),
+				},
+				comps::ParticleSpawner {
+					offset: Vector3::new(-0.3, -0.2, -0.4),
+					spawn_delay: 0.15,
+					time_to_spawn: 0.,
+					duration: 1.,
+					sprite: "data/engine_particles.cfg".to_string(),
+				},
+			],
 		},
 		comps::CastsShadow,
-	)))
+	))
+}
+
+fn spawn_particle(
+	pos: Point3<f32>, vel: Vector3<f32>, sprite: String, creation_time: f64, duration: f64,
+	world: &mut hecs::World,
+) -> hecs::Entity
+{
+	world.spawn((
+		comps::Position { pos: pos, dir: 0. },
+		comps::Velocity {
+			vel: vel,
+			dir_vel: 0.,
+		},
+		comps::TimeToDie {
+			time_to_die: creation_time + duration,
+		},
+		comps::Drawable {
+			kind: comps::DrawableKind::Animated {
+				sprite: sprite,
+				start_time: creation_time,
+				total_duration: duration,
+			},
+		},
+	))
+}
+
+fn spawn_cloud(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::Entity
+{
+	world.spawn((
+		comps::Position { pos: pos, dir: dir },
+		comps::Drawable {
+			kind: comps::DrawableKind::Oriented {
+				sprite: "data/plane.cfg".to_string(),
+			},
+		},
+		comps::CastsShadow,
+	))
 }
 
 fn get_height(heightmap: &[i32], pos: Point2<f32>) -> Option<f32>
@@ -351,10 +406,23 @@ impl Map
 		let mut world = hecs::World::default();
 
 		let player_pos = Point3::new(0., 2., 10.);
-		let player = spawn_player(player_pos, 0., &mut world, state)?;
+		let player = spawn_player(player_pos, 0., &mut world);
+
+		for y in 5..10
+		{
+			for x in 5..10
+			{
+				spawn_cloud(
+					Point3::new(x as f32, y as f32, x as f32 + 5.),
+					x as f32 + y as f32 * 0.1,
+					&mut world,
+				);
+			}
+		}
 
 		state.cache_sprite("data/terrain.cfg")?;
 		state.cache_sprite("data/plane.cfg")?;
+		state.cache_sprite("data/engine_particles.cfg")?;
 
 		Ok(Self {
 			heightmap: smooth_heightmap(&diamond_square(size)),
@@ -375,6 +443,8 @@ impl Map
 		&mut self, state: &mut game_state::GameState,
 	) -> Result<Option<game_state::NextScreen>>
 	{
+		let mut to_die = vec![];
+
 		// Player input.
 		let left_right = self.left_state as i32 - (self.right_state as i32);
 		let up_down = self.up_state as i32 - (self.down_state as i32);
@@ -391,7 +461,7 @@ impl Map
 		}
 
 		// Fixed engine.
-		for (id, (pos, eng, vel)) in
+		for (_, (pos, eng, vel)) in
 			self.world
 				.query_mut::<(&comps::Position, &comps::FixedEngine, &mut comps::Velocity)>()
 		{
@@ -400,12 +470,58 @@ impl Map
 		}
 
 		// Velocity.
-		for (id, (pos, vel)) in self
+		for (_, (pos, vel)) in self
 			.world
 			.query_mut::<(&mut comps::Position, &comps::Velocity)>()
 		{
 			pos.pos += utils::DT * vel.vel;
 			pos.dir += utils::DT * vel.dir_vel;
+		}
+
+		// Particle spawners.
+		let mut to_spawn = vec![];
+		for (_, (pos, spawners)) in self
+			.world
+			.query_mut::<(&comps::Position, &mut comps::ParticleSpawners)>()
+		{
+			for mut spawner in &mut spawners.spawners
+			{
+				if state.time() > spawner.time_to_spawn
+				{
+					let offset_xy = Rotation2::new(pos.dir) * spawner.offset.xy();
+					let offset = Vector3::new(offset_xy.x, offset_xy.y, spawner.offset.z);
+
+					to_spawn.push((
+						pos.pos + offset,
+						Vector3::<f32>::zeros(),
+						spawner.sprite.clone(),
+						spawner.duration,
+					));
+					spawner.time_to_spawn = state.time() + spawner.spawn_delay;
+				}
+			}
+		}
+		for (pos, vel, sprite, duration) in to_spawn
+		{
+			spawn_particle(pos, vel, sprite, state.time(), duration, &mut self.world);
+		}
+
+		// Time to die
+		for (id, time_to_die) in self.world.query_mut::<&comps::TimeToDie>()
+		{
+			if state.time() > time_to_die.time_to_die
+			{
+				to_die.push(id);
+			}
+		}
+
+		// Remove dead entities
+		to_die.sort();
+		to_die.dedup();
+		for id in to_die
+		{
+			//~ dbg!("died", id);
+			self.world.despawn(id)?;
 		}
 
 		Ok(None)
@@ -446,6 +562,8 @@ impl Map
 
 		let camera_xy = world_to_screen(self.camera_pos);
 
+		// Map drawing
+		state.core.hold_bitmap_drawing(true);
 		let dx = self.display_width / 2. - camera_xy.x;
 		let dy = self.display_height / 2. - camera_xy.y;
 		let tiles = state.get_sprite("data/terrain.cfg").unwrap();
@@ -474,15 +592,17 @@ impl Map
 				let variant = decode_tile(vals, x, y);
 				let xy = world_to_screen(Point3::new(x as f32, y as f32, min_val as f32));
 				tiles.draw(
-					xy - utils::Vec2D::new(64. - dx, 96. - dy),
+					utils::round_point(xy - utils::Vec2D::new(64. - dx, 96. - dy)),
 					variant,
 					Color::from_rgb_f(1., 1., 1.),
 					state,
 				);
 			}
 		}
+		state.core.hold_bitmap_drawing(false);
 
-		for (id, (pos, _)) in self
+		// Shadows
+		for (_, (pos, _)) in self
 			.world
 			.query::<(&comps::Position, &comps::CastsShadow)>()
 			.iter()
@@ -500,28 +620,65 @@ impl Map
 				);
 			}
 		}
-		for (id, (pos, drawable)) in self
+
+		// Sprites
+		let mut pos_and_sprite = vec![];
+		for (_, (pos, drawable)) in self
 			.world
 			.query::<(&comps::Position, &comps::Drawable)>()
 			.iter()
 		{
 			let xy = world_to_screen(pos.pos);
-			let num_orientations = 8;
-			let window_size = 2. * f32::pi() / num_orientations as f32;
-			let variant = (num_orientations
-				- (((pos.dir + f32::pi() + window_size / 2.) / window_size) as i32
-					+ num_orientations / 4)
-					% num_orientations)
-				% num_orientations;
 
-			let sprite = state.get_sprite(&drawable.sprite).unwrap();
+			let (sprite, variant) = match &drawable.kind
+			{
+				comps::DrawableKind::Oriented { sprite } =>
+				{
+					let num_orientations = 8;
+					let window_size = 2. * f32::pi() / num_orientations as f32;
+
+					let variant = (num_orientations
+						- (((pos.dir + f32::pi() + window_size / 2.) / window_size) as i32
+							+ num_orientations / 4) % num_orientations)
+						% num_orientations;
+					(sprite.clone(), variant)
+				}
+				comps::DrawableKind::Animated {
+					sprite,
+					start_time,
+					total_duration,
+				} =>
+				{
+					let num_variants = state.get_sprite(&sprite).unwrap().num_variants();
+					let variant = utils::clamp(
+						(num_variants as f64 * (state.time() - start_time) / total_duration) as i32,
+						0,
+						num_variants - 1,
+					);
+					(sprite.clone(), variant)
+				}
+			};
+
+			pos_and_sprite.push((pos.pos, xy, sprite, variant));
+		}
+		pos_and_sprite.sort_by(|(pos1, _, _, _), (pos2, _, _, _)| {
+			let yz1 = [pos1.y, pos1.z];
+			let yz2 = [pos2.y, pos2.z];
+
+			yz1.partial_cmp(&yz2).unwrap()
+		});
+		state.core.hold_bitmap_drawing(true);
+		for (_, xy, sprite, variant) in pos_and_sprite
+		{
+			let sprite = state.get_sprite(&sprite).unwrap();
 			sprite.draw(
-				xy + Vector2::new(dx, dy),
+				utils::round_point(xy + Vector2::new(dx, dy)),
 				variant,
 				Color::from_rgb_f(1., 1., 1.),
 				state,
 			);
 		}
+		state.core.hold_bitmap_drawing(false);
 
 		Ok(())
 	}

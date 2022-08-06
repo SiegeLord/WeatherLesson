@@ -57,6 +57,11 @@ impl Sprite
 		})
 	}
 
+	pub fn num_variants(&self) -> i32
+	{
+		self.variants.len() as i32
+	}
+
 	pub fn draw(&self, pos: Point2<f32>, variant: i32, tint: Color, state: &GameState)
 	{
 		let w = self.desc.width as f32;
