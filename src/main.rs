@@ -5,7 +5,7 @@
 
 //~ mod atlas;
 //~ mod character_sprite_sheet;
-//~ mod components;
+mod components;
 //~ mod controls;
 mod error;
 mod game_state;
@@ -14,6 +14,7 @@ mod map;
 //~ mod sfx;
 //~ mod spatial_grid;
 //~ mod ui;
+mod sprite;
 mod utils;
 
 use crate::error::Result;
@@ -68,10 +69,11 @@ fn real_main() -> Result<()>
 	state.draw_scale = utils::min(
 		(display.get_width() as f32) / (buffer.get_width() as f32),
 		(display.get_height() as f32) / (buffer.get_height() as f32),
-	);
+	)
+	.floor();
 
-	let timer =
-		Timer::new(&state.core, utils::DT as f64).map_err(|_| "Couldn't create timer".to_string())?;
+	let timer = Timer::new(&state.core, utils::DT as f64)
+		.map_err(|_| "Couldn't create timer".to_string())?;
 
 	let queue =
 		EventQueue::new(&state.core).map_err(|_| "Couldn't create event queue".to_string())?;
@@ -95,9 +97,9 @@ fn real_main() -> Result<()>
 	//~ let mut rng = thread_rng();
 
 	//~ let mut cur_screen = CurScreen::Menu(menu::Menu::new(
-		//~ &mut state,
-		//~ buffer_width as f32,
-		//~ buffer_height as f32,
+	//~ &mut state,
+	//~ buffer_width as f32,
+	//~ buffer_height as f32,
 	//~ )?);
 	let mut cur_screen = CurScreen::Game(map::Map::new(
 		&mut state,
@@ -122,7 +124,8 @@ fn real_main() -> Result<()>
 				state.draw_scale = utils::min(
 					(display.get_width() as f32) / (buffer.get_width() as f32),
 					(display.get_height() as f32) / (buffer.get_height() as f32),
-				);
+				)
+				.floor();
 			}
 
 			//~ let frame_start = state.core.get_time();
@@ -141,7 +144,7 @@ fn real_main() -> Result<()>
 
 			state.core.set_target_bitmap(Some(display.get_backbuffer()));
 
-			state.core.clear_to_color(Color::from_rgb_f(0., 0., 0.5));
+			state.core.clear_to_color(Color::from_rgb_f(0., 0., 0.));
 
 			let bw = buffer.get_width() as f32;
 			let bh = buffer.get_height() as f32;
@@ -227,33 +230,33 @@ fn real_main() -> Result<()>
 			{
 				//~ NextScreen::Game(level, class, health, weapons, lives) =>
 				//~ {
-					//~ for other_level in &mut state.levels.levels
-					//~ {
-						//~ if level == other_level.filename
-						//~ {
-							//~ other_level.unlocked = true;
-						//~ }
-					//~ }
-					//~ utils::save_config("data/levels.cfg", &state.levels)?;
-					//~ cur_screen = CurScreen::Game(map::Map::new(
-						//~ &mut state,
-						//~ &level,
-						//~ class,
-						//~ health,
-						//~ weapons,
-						//~ lives,
-						//~ buffer_width as f32,
-						//~ buffer_height as f32,
-					//~ )?);
+				//~ for other_level in &mut state.levels.levels
+				//~ {
+				//~ if level == other_level.filename
+				//~ {
+				//~ other_level.unlocked = true;
+				//~ }
+				//~ }
+				//~ utils::save_config("data/levels.cfg", &state.levels)?;
+				//~ cur_screen = CurScreen::Game(map::Map::new(
+				//~ &mut state,
+				//~ &level,
+				//~ class,
+				//~ health,
+				//~ weapons,
+				//~ lives,
+				//~ buffer_width as f32,
+				//~ buffer_height as f32,
+				//~ )?);
 				//~ }
 				//~ NextScreen::Menu =>
 				//~ {
-					//~ cur_screen = CurScreen::Menu(menu::Menu::new(
-						//~ &mut state,
-						//~ buffer_width as f32,
-						//~ buffer_height as f32,
-					//~ )?);
-					//~ state.hide_mouse = false;
+				//~ cur_screen = CurScreen::Menu(menu::Menu::new(
+				//~ &mut state,
+				//~ buffer_width as f32,
+				//~ buffer_height as f32,
+				//~ )?);
+				//~ state.hide_mouse = false;
 				//~ }
 				game_state::NextScreen::Quit =>
 				{

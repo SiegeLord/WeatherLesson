@@ -1,7 +1,7 @@
 use crate::error::Result;
 //~ use crate::sfx::Sfx;
-use crate::utils::{load_bitmap, Vec2D, DT};
 use crate::utils;
+use crate::utils::{load_bitmap, Vec2D, DT};
 use allegro::*;
 use allegro_font::*;
 use allegro_image::*;
@@ -29,11 +29,11 @@ pub struct Options
 pub enum NextScreen
 {
 	//~ Game(
-		//~ String,
-		//~ PlayerClass,
-		//~ Option<components::Health>,
-		//~ Option<components::WeaponSet>,
-		//~ i32,
+	//~ String,
+	//~ PlayerClass,
+	//~ Option<components::Health>,
+	//~ Option<components::WeaponSet>,
+	//~ i32,
 	//~ ),
 	//~ Menu,
 	Quit,
@@ -58,7 +58,6 @@ pub struct GameState
 	pub display_width: f32,
 	pub display_height: f32,
 	//~ pub levels: Levels,
-
 	bitmaps: HashMap<String, Bitmap>,
 	//~ character_sheets: HashMap<String, character_sprite_sheet::CharacterSpriteSheet>,
 }
@@ -132,18 +131,18 @@ impl GameState
 	}
 
 	//~ pub fn cache_sprite_sheet<'l>(
-		//~ &'l mut self, name: &str,
+	//~ &'l mut self, name: &str,
 	//~ ) -> Result<&'l character_sprite_sheet::CharacterSpriteSheet>
 	//~ {
-		//~ Ok(match self.character_sheets.entry(name.to_string())
-		//~ {
-			//~ Entry::Occupied(o) => o.into_mut(),
-			//~ Entry::Vacant(v) => v.insert(character_sprite_sheet::CharacterSpriteSheet::new(
-				//~ &self.core,
-				//~ name,
-				//~ &mut self.atlas,
-			//~ )?),
-		//~ })
+	//~ Ok(match self.character_sheets.entry(name.to_string())
+	//~ {
+	//~ Entry::Occupied(o) => o.into_mut(),
+	//~ Entry::Vacant(v) => v.insert(character_sprite_sheet::CharacterSpriteSheet::new(
+	//~ &self.core,
+	//~ name,
+	//~ &mut self.atlas,
+	//~ )?),
+	//~ })
 	//~ }
 
 	pub fn get_bitmap<'l>(&'l self, name: &str) -> Option<&'l Bitmap>
@@ -152,10 +151,10 @@ impl GameState
 	}
 
 	//~ pub fn get_sprite_sheet<'l>(
-		//~ &'l self, name: &str,
+	//~ &'l self, name: &str,
 	//~ ) -> Option<&'l character_sprite_sheet::CharacterSpriteSheet>
 	//~ {
-		//~ self.character_sheets.get(name)
+	//~ self.character_sheets.get(name)
 	//~ }
 
 	pub fn time(&self) -> f64
