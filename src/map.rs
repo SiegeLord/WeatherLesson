@@ -2,6 +2,7 @@ use crate::error::Result;
 use crate::{atlas, components as comps, controls, game_state, sprite, utils};
 
 use allegro::*;
+use allegro_font::*;
 use na::{
 	Isometry3, Matrix4, Perspective3, Point2, Point3, Quaternion, RealField, Rotation2, Rotation3,
 	Unit, Vector2, Vector3, Vector4,
@@ -329,8 +330,14 @@ fn spawn_player(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::En
 			],
 		},
 		comps::CastsShadow,
-		comps::ExplodeOnCollision,
-		comps::WaterCollector { time_to_splash: 0. },
+		comps::ExplodeOnCollision {
+			kind: comps::ExplosionKind::Explosion,
+		},
+		comps::WaterCollector {
+			time_to_splash: 0.,
+			time_to_drop: 0.,
+			water_amount: 0,
+		},
 	))
 }
 
@@ -353,6 +360,7 @@ fn spawn_particle(
 				sprite: sprite,
 				start_time: creation_time,
 				total_duration: duration,
+				once: true,
 			},
 		},
 	))
@@ -380,10 +388,38 @@ fn spawn_splash(pos: Point3<f32>, creation_time: f64, world: &mut hecs::World) -
 				sprite: "data/splash.cfg".to_string(),
 				start_time: creation_time,
 				total_duration: 0.5,
+				once: true,
 			},
 		},
 		comps::TimeToDie {
 			time_to_die: creation_time + 0.5,
+		},
+	))
+}
+
+fn spawn_water_blob(
+	pos: Point3<f32>, vel: Vector3<f32>, creation_time: f64, world: &mut hecs::World,
+) -> hecs::Entity
+{
+	world.spawn((
+		comps::Position { pos: pos, dir: 0. },
+		comps::Velocity {
+			vel: vel,
+			dir_vel: 0.,
+		},
+		comps::AffectedByGravity,
+		comps::AffectedByFriction,
+		comps::Drawable {
+			kind: comps::DrawableKind::Animated {
+				sprite: "data/water_blob.cfg".to_string(),
+				start_time: creation_time,
+				total_duration: 0.5,
+				once: false,
+			},
+		},
+		comps::CastsShadow,
+		comps::ExplodeOnCollision {
+			kind: comps::ExplosionKind::Splash,
 		},
 	))
 }
@@ -397,6 +433,7 @@ fn spawn_explosion(pos: Point3<f32>, creation_time: f64, world: &mut hecs::World
 				sprite: "data/explosion.cfg".to_string(),
 				start_time: creation_time,
 				total_duration: 0.5,
+				once: true,
 			},
 		},
 		comps::TimeToDie {
@@ -476,6 +513,7 @@ pub struct Map
 	down_state: bool,
 	left_state: bool,
 	right_state: bool,
+	drop_state: bool,
 }
 
 impl Map
@@ -507,6 +545,7 @@ impl Map
 		state.cache_sprite("data/engine_particles.cfg")?;
 		state.cache_sprite("data/explosion.cfg")?;
 		state.cache_sprite("data/splash.cfg")?;
+		state.cache_sprite("data/water_blob.cfg")?;
 
 		let heightmap = lower_heightmap(&smooth_heightmap(&diamond_square(size)));
 		print_heightmap(&heightmap);
@@ -523,6 +562,7 @@ impl Map
 			down_state: false,
 			left_state: false,
 			right_state: false,
+			drop_state: false,
 		})
 	}
 
@@ -533,12 +573,53 @@ impl Map
 		let mut to_die = vec![];
 
 		// Player input.
-		let left_right = self.left_state as i32 - (self.right_state as i32);
-		let up_down = self.up_state as i32 - (self.down_state as i32);
-		if let Ok(mut vel) = self.world.get::<&mut comps::Velocity>(self.player)
+		let mut spawn_water = None;
+		let mut rng = thread_rng();
+		if let Ok((pos, mut vel, mut water_col)) = self.world.query_one_mut::<(
+			&comps::Position,
+			&mut comps::Velocity,
+			&mut comps::WaterCollector,
+		)>(self.player)
 		{
+			let left_right = self.left_state as i32 - (self.right_state as i32);
+			let up_down = self.up_state as i32 - (self.down_state as i32);
+
 			vel.dir_vel = -left_right as f32 * 1.;
-			vel.vel.z = up_down as f32 * 2.;
+			let max_vert_speed = 3.;
+			let desired_vel = up_down as f32 * max_vert_speed;
+			let f = utils::clamp(water_col.water_amount as f32 / 50., 0., 1.);
+			let accel = f * 1. + (1. - f) * 5.;
+			if vel.vel.z > desired_vel
+			{
+				vel.vel.z -= accel * utils::DT;
+			}
+			else if vel.vel.z < desired_vel
+			{
+				vel.vel.z += accel * utils::DT;
+			}
+			let z_speed = vel.vel.z.abs();
+			if z_speed > max_vert_speed
+			{
+				vel.vel.z = max_vert_speed.copysign(vel.vel.z);
+			}
+
+			if self.drop_state
+			{
+				if state.time() > water_col.time_to_drop && water_col.water_amount > 0
+				{
+					water_col.time_to_drop = state.time() + 0.4;
+					water_col.water_amount -= 1;
+					spawn_water = Some((
+						pos.pos + Vector3::new(0., 0., -1.),
+						vel.vel
+							+ Vector3::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0), 0.),
+					));
+				}
+			}
+		}
+		if let Some((pos, vel)) = spawn_water
+		{
+			spawn_water_blob(pos, vel, state.time(), &mut self.world);
 		}
 
 		// Camera.
@@ -553,12 +634,18 @@ impl Map
 				.query_mut::<(&comps::Position, &comps::FixedEngine, &mut comps::Velocity)>()
 		{
 			let dir_vel = Rotation2::new(pos.dir) * Vector2::new(1., 0.);
-			vel.vel = eng.power * Vector3::new(dir_vel.x, dir_vel.y, vel.vel.z);
+			// Thinner air -> faster speed.
+			let f = utils::clamp(pos.pos.z / 20., 0., 1.);
+			let height_adj = f * 1.5 + (1. - f) * 1.;
+
+			let horiz_vel = height_adj * eng.power * Vector2::new(dir_vel.x, dir_vel.y);
+			vel.vel.x = horiz_vel.x;
+			vel.vel.y = horiz_vel.y;
 		}
 
 		// Collision.
 		let mut explosions = vec![];
-		for (id, (pos, _)) in self
+		for (id, (pos, explode)) in self
 			.world
 			.query_mut::<(&comps::Position, &comps::ExplodeOnCollision)>()
 		{
@@ -576,14 +663,24 @@ impl Map
 			}
 			if do_explode
 			{
-				explosions.push(pos.pos.clone());
+				explosions.push((pos.pos.clone(), explode.kind));
 				to_die.push(id);
 			}
 		}
 
-		for pos in explosions
+		for (pos, kind) in explosions
 		{
-			spawn_explosion(pos, state.time(), &mut self.world);
+			match kind
+			{
+				comps::ExplosionKind::Explosion =>
+				{
+					spawn_explosion(pos, state.time(), &mut self.world);
+				}
+				comps::ExplosionKind::Splash =>
+				{
+					spawn_splash(pos, state.time(), &mut self.world);
+				}
+			}
 		}
 
 		// Gravity.
@@ -594,26 +691,39 @@ impl Map
 			vel.vel.z -= utils::DT * 5.;
 		}
 
+		// Friction.
+		for (_, (vel, _)) in self
+			.world
+			.query_mut::<(&mut comps::Velocity, &comps::AffectedByGravity)>()
+		{
+			let friction = vel.vel.xy().normalize();
+			let friction = 0.5 * friction * vel.vel.xy().norm_squared();
+			vel.vel.x -= utils::DT * friction.x;
+			vel.vel.y -= utils::DT * friction.y;
+		}
+
 		// Velocity.
 		for (_, (pos, vel)) in self
 			.world
 			.query_mut::<(&mut comps::Position, &comps::Velocity)>()
 		{
 			pos.pos += utils::DT * vel.vel;
+			pos.pos.z = utils::clamp(pos.pos.z, 0., 15.);
 			pos.dir += utils::DT * vel.dir_vel;
 		}
 
 		// Water collection.
 		let mut add_splash = vec![];
-		for (_, (pos, water_collection)) in self
+		for (_, (pos, water_col)) in self
 			.world
 			.query_mut::<(&comps::Position, &mut comps::WaterCollector)>()
 		{
 			if let Some(h) = get_height(&self.heightmap, pos.pos.xy())
 			{
-				if h < 0.1 && pos.pos.z - h < 2. && state.time() > water_collection.time_to_splash
+				if h < 0.1 && pos.pos.z - h < 2. && state.time() > water_col.time_to_splash
 				{
-					water_collection.time_to_splash = state.time() + 0.25;
+					water_col.time_to_splash = state.time() + 0.25;
+					water_col.water_amount += 2;
 					add_splash.push(Point3::new(pos.pos.x, pos.pos.y, 0.01));
 				}
 			}
@@ -695,6 +805,10 @@ impl Map
 				controls::Action::TurnRight =>
 				{
 					self.right_state = down;
+				}
+				controls::Action::DropWater =>
+				{
+					self.drop_state = down;
 				}
 			}
 		}
@@ -784,23 +898,29 @@ impl Map
 					let window_size = 2. * f32::pi() / num_orientations as f32;
 
 					let variant = (num_orientations
-						- (((pos.dir.rem_euclid(2. * f32::pi()) + f32::pi() + window_size / 2.) / window_size) as i32
-							+ num_orientations / 4) % num_orientations)
-						% num_orientations;
+						- (((pos.dir.rem_euclid(2. * f32::pi()) + f32::pi() + window_size / 2.)
+							/ window_size) as i32 + num_orientations / 4)
+							% num_orientations) % num_orientations;
 					(sprite.clone(), variant)
 				}
 				comps::DrawableKind::Animated {
 					sprite,
 					start_time,
 					total_duration,
+					once,
 				} =>
 				{
 					let num_variants = state.get_sprite(&sprite).unwrap().num_variants();
-					let variant = utils::clamp(
-						(num_variants as f64 * (state.time() - start_time) / total_duration) as i32,
-						0,
-						num_variants - 1,
-					);
+					let variant =
+						(num_variants as f64 * (state.time() - start_time) / total_duration) as i32;
+					let variant = if *once
+					{
+						utils::clamp(variant, 0, num_variants - 1)
+					}
+					else
+					{
+						variant % num_variants
+					};
 					(sprite.clone(), variant)
 				}
 			};
@@ -808,8 +928,8 @@ impl Map
 			pos_and_sprite.push((pos.pos, xy, sprite, variant));
 		}
 		pos_and_sprite.sort_by(|(pos1, _, _, _), (pos2, _, _, _)| {
-			let yz1 = [pos1.y, pos1.z];
-			let yz2 = [pos2.y, pos2.z];
+			let yz1 = [pos1.z, pos1.y];
+			let yz2 = [pos2.z, pos2.y];
 
 			yz1.partial_cmp(&yz2).unwrap()
 		});
@@ -825,6 +945,28 @@ impl Map
 			);
 		}
 		state.core.hold_bitmap_drawing(false);
+
+		// UI
+		if let Ok(water_col) = self.world.get::<&comps::WaterCollector>(self.player)
+		{
+			state.core.draw_text(
+				&state.ui_font,
+				Color::from_rgb_f(0.4, 0.4, 0.8),
+				48.,
+				24.,
+				FontAlign::Centre,
+				"WATER",
+			);
+
+			state.core.draw_text(
+				&state.number_font,
+				Color::from_rgb_f(0.4, 0.8, 0.4),
+				96.,
+				24.,
+				FontAlign::Centre,
+				&format!("{:0>2}", water_col.water_amount),
+			);
+		}
 
 		Ok(())
 	}

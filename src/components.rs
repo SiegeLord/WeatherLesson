@@ -37,6 +37,7 @@ pub enum DrawableKind
 		sprite: String,
 		start_time: f64,
 		total_duration: f64,
+		once: bool,
 	},
 }
 
@@ -68,14 +69,29 @@ pub struct ParticleSpawners
 	pub spawners: Vec<ParticleSpawner>,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum ExplosionKind
+{
+	Explosion,
+	Splash,
+}
+
 #[derive(Debug, Clone)]
-pub struct ExplodeOnCollision;
+pub struct ExplodeOnCollision
+{
+	pub kind: ExplosionKind,
+}
 
 #[derive(Debug, Clone)]
 pub struct AffectedByGravity;
 
 #[derive(Debug, Clone)]
+pub struct AffectedByFriction;
+
+#[derive(Debug, Clone)]
 pub struct WaterCollector
 {
 	pub time_to_splash: f64,
+	pub time_to_drop: f64,
+	pub water_amount: i32,
 }

@@ -309,6 +309,7 @@ pub enum Action
 	TurnRight,
 	MoveForward,
 	MoveBackward,
+	DropWater,
 }
 
 impl Action
@@ -321,6 +322,7 @@ impl Action
 			Action::TurnRight => "TURN RIGHT",
 			Action::MoveForward => "FORWARD",
 			Action::MoveBackward => "BACKWARD",
+			Action::DropWater => "DROP WATER",
 		}
 	}
 }
@@ -340,6 +342,7 @@ impl Controls
 		controls.insert(Action::TurnRight, KeyCode(allegro::KeyCode::Right));
 		controls.insert(Action::MoveForward, KeyCode(allegro::KeyCode::W));
 		controls.insert(Action::MoveBackward, KeyCode(allegro::KeyCode::S));
+		controls.insert(Action::DropWater, KeyCode(allegro::KeyCode::Space));
 		Self { controls: controls }
 	}
 
