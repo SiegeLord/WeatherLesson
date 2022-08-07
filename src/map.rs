@@ -304,7 +304,7 @@ fn spawn_player(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::En
 			vel: Vector3::zeros(),
 			dir_vel: 0.,
 		},
-		comps::FixedEngine { power: 1.5 },
+		comps::FixedEngine { power: 2. },
 		comps::Drawable {
 			kind: comps::DrawableKind::Oriented {
 				sprite: "data/plane.cfg".to_string(),
@@ -784,7 +784,7 @@ impl Map
 					let window_size = 2. * f32::pi() / num_orientations as f32;
 
 					let variant = (num_orientations
-						- (((pos.dir + f32::pi() + window_size / 2.) / window_size) as i32
+						- (((pos.dir.rem_euclid(2. * f32::pi()) + f32::pi() + window_size / 2.) / window_size) as i32
 							+ num_orientations / 4) % num_orientations)
 						% num_orientations;
 					(sprite.clone(), variant)
