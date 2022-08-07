@@ -307,8 +307,8 @@ pub enum Action
 {
 	TurnLeft,
 	TurnRight,
-	MoveForward,
-	MoveBackward,
+	Ascend,
+	Descend,
 	DropWater,
 }
 
@@ -320,8 +320,8 @@ impl Action
 		{
 			Action::TurnLeft => "TURN LEFT",
 			Action::TurnRight => "TURN RIGHT",
-			Action::MoveForward => "FORWARD",
-			Action::MoveBackward => "BACKWARD",
+			Action::Ascend => "ASCEND",
+			Action::Descend => "DESCEND",
 			Action::DropWater => "DROP WATER",
 		}
 	}
@@ -340,8 +340,8 @@ impl Controls
 		let mut controls = bimap::BiBTreeMap::new();
 		controls.insert(Action::TurnLeft, KeyCode(allegro::KeyCode::Left));
 		controls.insert(Action::TurnRight, KeyCode(allegro::KeyCode::Right));
-		controls.insert(Action::MoveForward, KeyCode(allegro::KeyCode::W));
-		controls.insert(Action::MoveBackward, KeyCode(allegro::KeyCode::S));
+		controls.insert(Action::Ascend, KeyCode(allegro::KeyCode::W));
+		controls.insert(Action::Descend, KeyCode(allegro::KeyCode::S));
 		controls.insert(Action::DropWater, KeyCode(allegro::KeyCode::Space));
 		Self { controls: controls }
 	}

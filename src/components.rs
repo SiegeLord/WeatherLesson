@@ -115,6 +115,12 @@ pub struct Mushroom
 }
 
 #[derive(Debug, Clone)]
+pub struct Obelisk
+{
+	pub dest: Point3<f32>,
+}
+
+#[derive(Debug, Clone)]
 pub enum OnDeathEffect
 {
 	Explosion

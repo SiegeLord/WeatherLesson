@@ -1,6 +1,5 @@
 use crate::error::Result;
-//~ use crate::sfx::Sfx;
-use crate::{atlas, controls, sprite, utils};
+use crate::{atlas, controls, sprite, utils, sfx};
 use allegro::*;
 use allegro_font::*;
 use allegro_image::*;
@@ -47,7 +46,10 @@ pub struct GameState
 	pub ttf: TtfAddon,
 	pub tick: i64,
 	pub paused: bool,
-	//~ pub sfx: Sfx,
+	
+	pub swirl_amount: f32,
+	
+	pub sfx: sfx::Sfx,
 	//~ pub hide_mouse: bool,
 	pub atlas: atlas::Atlas,
 	pub ui_font: Font,
@@ -76,7 +78,7 @@ impl GameState
 		core.install_mouse()
 			.map_err(|_| "Couldn't install mouse".to_string())?;
 
-		//~ let sfx = Sfx::new(options.sfx_volume, options.music_volume, &core)?;
+		let sfx = sfx::Sfx::new(options.sfx_volume, options.music_volume, &core)?;
 
 		let ui_font = ttf
 			.load_ttf_font("data/GAMEPLAY-1987.ttf", 16, TtfFlags::zero())
@@ -97,7 +99,7 @@ impl GameState
 			sprites: HashMap::new(),
 			font: font,
 			ttf: ttf,
-			//~ sfx: sfx,
+			sfx: sfx,
 			paused: false,
 			//~ hide_mouse: false,
 			atlas: atlas::Atlas::new(2048),
@@ -106,6 +108,7 @@ impl GameState
 			draw_scale: 1.,
 			display_width: 0.,
 			display_height: 0.,
+			swirl_amount: 0.,
 			//~ levels: levels,
 		})
 	}

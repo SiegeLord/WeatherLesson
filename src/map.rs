@@ -344,7 +344,7 @@ fn spawn_player(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::En
 		comps::WaterCollector {
 			time_to_splash: 0.,
 			time_to_drop: 0.,
-			water_amount: 99,
+			water_amount: 0,
 		},
 	))
 }
@@ -405,6 +405,20 @@ fn spawn_mushroom(pos: Point3<f32>, world: &mut hecs::World) -> hecs::Entity
 		},
 		comps::CastsShadow,
 		comps::Mushroom { on_fire: false },
+	))
+}
+
+fn spawn_obelisk(pos: Point3<f32>, dest: Point3<f32>, world: &mut hecs::World) -> hecs::Entity
+{
+	world.spawn((
+		comps::Position { pos: pos, dir: 0. },
+		comps::Drawable {
+			kind: comps::DrawableKind::Fixed {
+				sprite: "data/obelisk.cfg".to_string(),
+				variant: 0,
+			},
+		},
+		comps::Obelisk { dest: dest },
 	))
 }
 
@@ -687,6 +701,7 @@ impl Map
 		state.cache_sprite("data/mushroom.cfg")?;
 		state.cache_sprite("data/fire.cfg")?;
 		state.cache_sprite("data/cloud.cfg")?;
+		state.cache_sprite("data/obelisk.cfg")?;
 		//~ state.atlas.dump_pages();
 
 		let heightmap = lower_heightmap(&smooth_heightmap(&diamond_square(size)));
@@ -728,6 +743,35 @@ impl Map
 				};
 			}
 		}
+		
+		let mut obelisk_locs = vec![];
+		for _ in 0..3
+		{
+			'placed: loop
+			{
+				let x = rng.gen_range(0..real_size - 1);
+				let y = rng.gen_range(0..real_size - 1);
+				let h = get_height(&heightmap, Point2::new(x as f32, y as f32)).unwrap();
+				
+				if h > 0.5 && !obelisk_locs.iter().any(|&e| e == (x, y)) && mushrooms[(x + y * real_size) as usize].is_none()
+				{
+					obelisk_locs.push((x, y));
+					loop
+					{
+						let dx = rng.gen_range(5..real_size - 5);
+						let dy = rng.gen_range(5..real_size - 5);
+						let h2 = get_height(&heightmap, Point2::new(dx as f32, dy as f32)).unwrap();
+						
+						if !obelisk_locs.iter().any(|&e| e == (dx, dy))
+						{
+							spawn_obelisk(Point3::new(x as f32, y as f32, h), Point3::new(dx as f32, dy as f32, h2 + 6.), &mut world);
+							break 'placed;
+						}
+					}
+				}
+			}
+		}
+		
 		print_heightmap(&heightmap);
 
 		Ok(Self {
@@ -757,12 +801,14 @@ impl Map
 		// Player input.
 		let mut spawn_water = None;
 		let mut rng = thread_rng();
+		let mut player_pos = None;
 		if let Ok((pos, mut vel, mut water_col)) = self.world.query_one_mut::<(
 			&comps::Position,
 			&mut comps::Velocity,
 			&mut comps::WaterCollector,
 		)>(self.player)
 		{
+			player_pos = Some(pos.pos);
 			let left_right = self.left_state as i32 - (self.right_state as i32);
 			let up_down = self.up_state as i32 - (self.down_state as i32);
 
@@ -853,7 +899,7 @@ impl Map
 		}
 
 		// Cloud.
-		for (id, (pos, _)) in self
+		for (_, (pos, _)) in self
 			.world
 			.query_mut::<(&mut comps::Position, &comps::Cloud)>()
 		{
@@ -881,6 +927,42 @@ impl Map
 				let friction = 0.5 * friction * vel.vel.xy().norm_squared();
 				vel.vel.x -= utils::DT * friction.x;
 				vel.vel.y -= utils::DT * friction.y;
+			}
+		}
+		
+		// Obelisk.
+		let mut teleport = None;
+		if let Some(player_pos) = player_pos
+		{
+			let mut near_obelisk = false;
+			for (_, (pos, obelisk)) in self
+				.world
+				.query_mut::<(&comps::Position, &comps::Obelisk)>()
+			{
+				let norm = (player_pos.xy() - pos.pos.xy()).norm();
+				
+				let effect_dist = 3.;
+				if norm < effect_dist
+				{
+					let f = norm / effect_dist;
+					state.swirl_amount = 0. * f + 5. * (1. - f);
+					near_obelisk = true;
+				}
+				if norm < 1.
+				{
+					teleport = Some(obelisk.dest);
+				}
+			}
+			if !near_obelisk
+			{
+				state.swirl_amount = utils::max(state.swirl_amount - 12. * utils::DT, 0.);
+			}
+		}
+		if let Some(dest) = teleport
+		{
+			if let Ok(mut pos) = self.world.get::<&mut comps::Position>(self.player)
+			{
+				pos.pos = dest;
 			}
 		}
 
@@ -1058,11 +1140,11 @@ impl Map
 		{
 			match action
 			{
-				controls::Action::MoveForward =>
+				controls::Action::Ascend =>
 				{
 					self.up_state = down;
 				}
-				controls::Action::MoveBackward =>
+				controls::Action::Descend =>
 				{
 					self.down_state = down;
 				}
@@ -1151,7 +1233,7 @@ impl Map
 
 		// Sprites
 		let mut pos_and_sprite = vec![];
-		for (_, (pos, drawable)) in self
+		for (id, (pos, drawable)) in self
 			.world
 			.query::<(&comps::Position, &comps::Drawable)>()
 			.iter()
@@ -1165,11 +1247,31 @@ impl Map
 					let num_orientations = 8;
 					let window_size = 2. * f32::pi() / num_orientations as f32;
 
+					let offt = if let Ok(vel) = self.world.get::<&comps::Velocity>(id)
+					{
+						if vel.vel.z > 0.1
+						{
+							num_orientations
+						}
+						else if vel.vel.z < -0.1
+						{
+							2 * num_orientations
+						}
+						else
+						{
+							0
+						}
+					}
+					else
+					{
+						0
+					};
+
 					let variant = (num_orientations
 						- (((pos.dir.rem_euclid(2. * f32::pi()) + f32::pi() + window_size / 2.)
 							/ window_size) as i32 + num_orientations / 4)
 							% num_orientations) % num_orientations;
-					(sprite.clone(), variant)
+					(sprite.clone(), offt + variant)
 				}
 				comps::DrawableKind::Fixed { sprite, variant } => (sprite.clone(), *variant),
 				comps::DrawableKind::Animated {
@@ -1205,7 +1307,7 @@ impl Map
 		state.core.hold_bitmap_drawing(true);
 		for (_, xy, sprite, variant) in pos_and_sprite
 		{
-			let sprite = state.get_sprite(&sprite).unwrap();
+			let sprite = state.get_sprite(&sprite).expect(&format!("Could not find sprite: {}", sprite));
 			sprite.draw(
 				utils::round_point(xy + Vector2::new(dx, dy)),
 				variant,

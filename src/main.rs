@@ -11,7 +11,7 @@ mod error;
 mod game_state;
 mod map;
 //~ mod menu;
-//~ mod sfx;
+mod sfx;
 //~ mod spatial_grid;
 //~ mod ui;
 mod sprite;
@@ -24,6 +24,33 @@ use allegro_sys::*;
 use rand::prelude::*;
 use serde_derive::{Deserialize, Serialize};
 use std::rc::Rc;
+use std::sync;
+
+fn make_teleport_shader(disp: &mut Display) -> Result<sync::Weak<Shader>>
+{
+	let shader = disp.create_shader(ShaderPlatform::GLSL).unwrap();
+
+	shader
+		.upgrade()
+		.unwrap()
+		.attach_shader_source(
+			ShaderType::Vertex,
+			Some(&utils::read_to_string("data/teleport_vertex.glsl")?),
+		)
+		.unwrap();
+
+	shader
+		.upgrade()
+		.unwrap()
+		.attach_shader_source(
+			ShaderType::Pixel,
+			Some(&utils::read_to_string("data/teleport_pixel.glsl")?),
+		)
+		.unwrap();
+	shader.upgrade().unwrap().build().unwrap();
+	Ok(shader)
+}
+
 
 enum CurScreen
 {
@@ -35,18 +62,14 @@ fn real_main() -> Result<()>
 {
 	let mut state = game_state::GameState::new()?;
 
+	let mut flags = OPENGL | RESIZABLE | PROGRAMMABLE_PIPELINE;
+
 	if state.options.fullscreen
 	{
-		state
-			.core
-			.set_new_display_flags(OPENGL | FULLSCREEN_WINDOW | RESIZABLE);
+		flags = flags | FULLSCREEN_WINDOW;
 	}
+	state.core.set_new_display_flags(flags);
 
-	state.core.set_new_display_option(
-		DisplayOption::DepthSize,
-		16,
-		DisplayOptionImportance::Suggest,
-	);
 	if state.options.vsync_method == 1
 	{
 		state.core.set_new_display_option(
@@ -55,20 +78,21 @@ fn real_main() -> Result<()>
 			DisplayOptionImportance::Suggest,
 		);
 	}
-	let display = Display::new(&state.core, state.options.width, state.options.height)
+	let mut display = Display::new(&state.core, state.options.width, state.options.height)
 		.map_err(|_| "Couldn't create display".to_string())?;
 
 	let buffer_width = 800;
 	let buffer_height = 600;
-	state.core.set_new_bitmap_depth(16);
-	let buffer = Bitmap::new(&state.core, buffer_width, buffer_height).unwrap();
-	state.core.set_new_bitmap_depth(0);
+	
+	let teleport_shader = make_teleport_shader(&mut display)?;
+	let buffer1 = Bitmap::new(&state.core, buffer_width, buffer_height).unwrap();
+	let buffer2 = Bitmap::new(&state.core, buffer_width, buffer_height).unwrap();
 
 	state.display_width = display.get_width() as f32;
 	state.display_height = display.get_height() as f32;
 	state.draw_scale = utils::min(
-		(display.get_width() as f32) / (buffer.get_width() as f32),
-		(display.get_height() as f32) / (buffer.get_height() as f32),
+		(display.get_width() as f32) / (buffer_width as f32),
+		(display.get_height() as f32) / (buffer_height as f32),
 	)
 	.floor();
 
@@ -122,14 +146,14 @@ fn real_main() -> Result<()>
 				state.display_width = display.get_width() as f32;
 				state.display_height = display.get_height() as f32;
 				state.draw_scale = utils::min(
-					(display.get_width() as f32) / (buffer.get_width() as f32),
-					(display.get_height() as f32) / (buffer.get_height() as f32),
+					(display.get_width() as f32) / (buffer_width as f32),
+					(display.get_height() as f32) / (buffer_height as f32),
 				)
 				.floor();
 			}
 
 			let frame_start = state.core.get_time();
-			state.core.set_target_bitmap(Some(&buffer));
+			state.core.set_target_bitmap(Some(&buffer1));
 
 			match &mut cur_screen
 			{
@@ -142,17 +166,40 @@ fn real_main() -> Result<()>
 				state.core.wait_for_vsync().ok();
 			}
 
+			state.core.set_target_bitmap(Some(&buffer2));
+			
+			state
+				.core
+				.use_shader(Some(&*teleport_shader.upgrade().unwrap()))
+				.unwrap();
+			state
+				.core
+				.set_shader_uniform(
+					"bitmap_dims",
+					&[[buffer1.get_width() as f32, buffer1.get_height() as f32]][..],
+				)
+				.ok();
+			state
+				.core
+				.set_shader_uniform(
+					"swirl_amount",
+					&[state.swirl_amount][..],
+				)
+				.ok();
+				
+			state.core.draw_bitmap(&buffer1, 0., 0., Flag::zero());
+			
 			state.core.set_target_bitmap(Some(display.get_backbuffer()));
 
 			state.core.clear_to_color(Color::from_rgb_f(0., 0., 0.));
 
-			let bw = buffer.get_width() as f32;
-			let bh = buffer.get_height() as f32;
+			let bw = buffer_width as f32;
+			let bh = buffer_height as f32;
 			let dw = display.get_width() as f32;
 			let dh = display.get_height() as f32;
 
 			state.core.draw_scaled_bitmap(
-				&buffer,
+				&buffer2,
 				0.,
 				0.,
 				bw,
