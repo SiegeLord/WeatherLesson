@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::{atlas, components as comps, controls, game_state, sprite, utils};
+use crate::{atlas, components as comps, controls, game_state, sprite, ui, utils};
 
 use allegro::*;
 use allegro_font::*;
@@ -9,6 +9,13 @@ use na::{
 };
 use nalgebra as na;
 use rand::prelude::*;
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum UIState
+{
+	Regular,
+	InMenu,
+}
 
 fn decode_tile(vals: [i32; 4], x: i32, y: i32, z: i32) -> i32
 {
@@ -80,7 +87,7 @@ fn print_heightmap(heightmap: &[i32])
 	}
 }
 
-fn diamond_square(size: i32) -> Vec<i32>
+fn diamond_square<R: Rng>(size: i32, rng: &mut R) -> Vec<i32>
 {
 	assert!(size >= 0);
 	let real_size = 2i32.pow(size as u32) + 1;
@@ -89,7 +96,6 @@ fn diamond_square(size: i32) -> Vec<i32>
 	let global_max_height = 8;
 
 	let mut heightmap = vec![-1i32; (real_size * real_size) as usize];
-	let mut rng = thread_rng();
 	let seed: u64 = rng.gen();
 	//~ let seed = 13207773306860755903;
 	dbg!(seed);
@@ -600,10 +606,8 @@ fn get_mushroom(mushrooms: &[Option<hecs::Entity>], pos: Point2<f32>) -> Option<
 }
 
 #[rustfmt::skip]
-fn add_word(mushroom_map: &mut [(bool, f32)])
+fn add_word<R: Rng>(mushroom_map: &mut [(bool, f32)], rng: &mut R)
 {
-	let mut rng = thread_rng();
-	
 	let size = (mushroom_map.len() as f32).sqrt() as i32;
 	
 	let words: Vec<Vec<Vec<i32>>> = vec![
@@ -657,6 +661,9 @@ pub struct Map
 	world: hecs::World,
 	player: hecs::Entity,
 	time_to_spread_fire: f64,
+	subscreens: Vec<ui::SubScreen>,
+	ui_state: UIState,
+	seed: u64,
 
 	up_state: bool,
 	down_state: bool,
@@ -668,7 +675,7 @@ pub struct Map
 impl Map
 {
 	pub fn new(
-		state: &mut game_state::GameState, display_width: f32, display_height: f32,
+		state: &mut game_state::GameState, display_width: f32, display_height: f32, seed: u64,
 	) -> Result<Self>
 	{
 		let size = 5;
@@ -679,7 +686,7 @@ impl Map
 		let player_pos = Point3::new(0., 2., 10.);
 		let player = spawn_player(player_pos, 0., &mut world);
 
-		let mut rng = thread_rng();
+		let mut rng = StdRng::seed_from_u64(seed);
 		for _ in 0..16
 		{
 			spawn_cloud(
@@ -704,7 +711,10 @@ impl Map
 		state.cache_sprite("data/obelisk.cfg")?;
 		//~ state.atlas.dump_pages();
 
-		let heightmap = lower_heightmap(&smooth_heightmap(&diamond_square(size)));
+		state.sfx.cache_sample("data/ui1.ogg")?;
+		state.sfx.cache_sample("data/ui2.ogg")?;
+
+		let heightmap = lower_heightmap(&smooth_heightmap(&diamond_square(size, &mut rng)));
 		let mut mushroom_map = vec![(false, 0.); heightmap.len()];
 
 		for y in 0..real_size - 1
@@ -718,7 +728,7 @@ impl Map
 
 		for _ in 0..size * size / 4
 		{
-			add_word(&mut mushroom_map);
+			add_word(&mut mushroom_map, &mut rng);
 		}
 
 		let mut mushrooms = vec![None; mushroom_map.len()];
@@ -743,7 +753,7 @@ impl Map
 				};
 			}
 		}
-		
+
 		let mut obelisk_locs = vec![];
 		for _ in 0..3
 		{
@@ -752,8 +762,10 @@ impl Map
 				let x = rng.gen_range(0..real_size - 1);
 				let y = rng.gen_range(0..real_size - 1);
 				let h = get_height(&heightmap, Point2::new(x as f32, y as f32)).unwrap();
-				
-				if h > 0.5 && !obelisk_locs.iter().any(|&e| e == (x, y)) && mushrooms[(x + y * real_size) as usize].is_none()
+
+				if h > 0.5
+					&& !obelisk_locs.iter().any(|&e| e == (x, y))
+					&& mushrooms[(x + y * real_size) as usize].is_none()
 				{
 					obelisk_locs.push((x, y));
 					loop
@@ -761,17 +773,21 @@ impl Map
 						let dx = rng.gen_range(5..real_size - 5);
 						let dy = rng.gen_range(5..real_size - 5);
 						let h2 = get_height(&heightmap, Point2::new(dx as f32, dy as f32)).unwrap();
-						
+
 						if !obelisk_locs.iter().any(|&e| e == (dx, dy))
 						{
-							spawn_obelisk(Point3::new(x as f32, y as f32, h), Point3::new(dx as f32, dy as f32, h2 + 6.), &mut world);
+							spawn_obelisk(
+								Point3::new(x as f32, y as f32, h),
+								Point3::new(dx as f32, dy as f32, h2 + 6.),
+								&mut world,
+							);
 							break 'placed;
 						}
 					}
 				}
 			}
 		}
-		
+
 		print_heightmap(&heightmap);
 
 		Ok(Self {
@@ -789,6 +805,9 @@ impl Map
 			right_state: false,
 			drop_state: false,
 			time_to_spread_fire: state.time() + 5.,
+			subscreens: vec![],
+			ui_state: UIState::Regular,
+			seed: seed,
 		})
 	}
 
@@ -796,6 +815,10 @@ impl Map
 		&mut self, state: &mut game_state::GameState,
 	) -> Result<Option<game_state::NextScreen>>
 	{
+		if self.ui_state == UIState::InMenu
+		{
+			return Ok(None);
+		}
 		let mut to_die = vec![];
 
 		// Player input.
@@ -929,18 +952,18 @@ impl Map
 				vel.vel.y -= utils::DT * friction.y;
 			}
 		}
-		
+
 		// Obelisk.
 		let mut teleport = None;
+		let mut near_obelisk = false;
 		if let Some(player_pos) = player_pos
 		{
-			let mut near_obelisk = false;
 			for (_, (pos, obelisk)) in self
 				.world
 				.query_mut::<(&comps::Position, &comps::Obelisk)>()
 			{
 				let norm = (player_pos.xy() - pos.pos.xy()).norm();
-				
+
 				let effect_dist = 3.;
 				if norm < effect_dist
 				{
@@ -953,10 +976,10 @@ impl Map
 					teleport = Some(obelisk.dest);
 				}
 			}
-			if !near_obelisk
-			{
-				state.swirl_amount = utils::max(state.swirl_amount - 12. * utils::DT, 0.);
-			}
+		}
+		if !near_obelisk
+		{
+			state.swirl_amount = utils::max(state.swirl_amount - 12. * utils::DT, 0.);
 		}
 		if let Some(dest) = teleport
 		{
@@ -1136,30 +1159,109 @@ impl Map
 		&mut self, event: &Event, state: &mut game_state::GameState,
 	) -> Result<Option<game_state::NextScreen>>
 	{
-		if let Some((down, action)) = state.options.controls.decode_event(event)
+		if self.ui_state == UIState::InMenu
 		{
-			match action
+			if let Event::KeyDown {
+				keycode: KeyCode::Escape,
+				..
+			} = event
 			{
-				controls::Action::Ascend =>
+				state.sfx.play_sound("data/ui2.ogg").unwrap();
+				self.subscreens.pop().unwrap();
+			}
+			if let Some(action) = self
+				.subscreens
+				.last_mut()
+				.and_then(|s| s.input(state, event))
+			{
+				match action
 				{
-					self.up_state = down;
+					ui::Action::ControlsMenu =>
+					{
+						self.subscreens
+							.push(ui::SubScreen::ControlsMenu(ui::ControlsMenu::new(
+								self.display_width,
+								self.display_height,
+								state,
+							)));
+					}
+					ui::Action::OptionsMenu =>
+					{
+						self.subscreens
+							.push(ui::SubScreen::OptionsMenu(ui::OptionsMenu::new(
+								self.display_width,
+								self.display_height,
+								state,
+							)));
+					}
+					ui::Action::MainMenu => return Ok(Some(game_state::NextScreen::Menu)),
+					ui::Action::Back =>
+					{
+						self.subscreens.pop().unwrap();
+					}
+					_ => (),
 				}
-				controls::Action::Descend =>
+			}
+			if self.subscreens.is_empty()
+			{
+				self.ui_state = UIState::Regular;
+				state.paused = false;
+			}
+		}
+		else
+		{
+			if let Some((down, action)) = state.options.controls.decode_event(event)
+			{
+				match action
 				{
-					self.down_state = down;
+					controls::Action::Ascend =>
+					{
+						self.up_state = down;
+					}
+					controls::Action::Descend =>
+					{
+						self.down_state = down;
+					}
+					controls::Action::TurnLeft =>
+					{
+						self.left_state = down;
+					}
+					controls::Action::TurnRight =>
+					{
+						self.right_state = down;
+					}
+					controls::Action::DropWater =>
+					{
+						self.drop_state = down;
+					}
+					controls::Action::Restart =>
+					{
+						if down
+						{
+							return Ok(Some(game_state::NextScreen::Game { seed: self.seed }));
+						}
+					}
 				}
-				controls::Action::TurnLeft =>
+			}
+
+			match event
+			{
+				Event::KeyDown { keycode, .. } => match keycode
 				{
-					self.left_state = down;
-				}
-				controls::Action::TurnRight =>
-				{
-					self.right_state = down;
-				}
-				controls::Action::DropWater =>
-				{
-					self.drop_state = down;
-				}
+					KeyCode::Escape =>
+					{
+						state.sfx.play_sound("data/ui2.ogg").unwrap();
+						self.subscreens
+							.push(ui::SubScreen::InGameMenu(ui::InGameMenu::new(
+								self.display_width,
+								self.display_height,
+							)));
+						self.ui_state = UIState::InMenu;
+						state.paused = true;
+					}
+					_ => (),
+				},
+				_ => (),
 			}
 		}
 		Ok(None)
@@ -1307,7 +1409,9 @@ impl Map
 		state.core.hold_bitmap_drawing(true);
 		for (_, xy, sprite, variant) in pos_and_sprite
 		{
-			let sprite = state.get_sprite(&sprite).expect(&format!("Could not find sprite: {}", sprite));
+			let sprite = state
+				.get_sprite(&sprite)
+				.expect(&format!("Could not find sprite: {}", sprite));
 			sprite.draw(
 				utils::round_point(xy + Vector2::new(dx, dy)),
 				variant,
@@ -1337,6 +1441,45 @@ impl Map
 				FontAlign::Centre,
 				&format!("{:0>2}", water_col.water_amount),
 			);
+		}
+
+		if self.ui_state == UIState::Regular
+		{
+			if !self.world.contains(self.player)
+			{
+				state.core.draw_text(
+					&state.ui_font,
+					Color::from_rgb_f(0.4, 0.4, 0.8),
+					self.display_width / 2.,
+					self.display_height / 2.,
+					FontAlign::Centre,
+					&format!(
+						"CRASHED! PRESS {} TO RESTART.",
+						state
+							.options
+							.controls
+							.controls
+							.get_by_left(&controls::Action::Restart)
+							.unwrap()
+							.to_str()
+							.to_uppercase()
+					),
+				);
+			}
+		}
+		else
+		{
+			if let Some(subscreen) = self.subscreens.last()
+			{
+				state.prim.draw_filled_rectangle(
+					0.,
+					0.,
+					self.display_width,
+					self.display_height,
+					Color::from_rgba_f(0., 0., 0., 0.5),
+				);
+				subscreen.draw(state);
+			}
 		}
 
 		Ok(())

@@ -310,6 +310,7 @@ pub enum Action
 	Ascend,
 	Descend,
 	DropWater,
+	Restart,
 }
 
 impl Action
@@ -323,6 +324,7 @@ impl Action
 			Action::Ascend => "ASCEND",
 			Action::Descend => "DESCEND",
 			Action::DropWater => "DROP WATER",
+			Action::Restart => "RESTART",
 		}
 	}
 }
@@ -343,6 +345,7 @@ impl Controls
 		controls.insert(Action::Ascend, KeyCode(allegro::KeyCode::W));
 		controls.insert(Action::Descend, KeyCode(allegro::KeyCode::S));
 		controls.insert(Action::DropWater, KeyCode(allegro::KeyCode::Space));
+		controls.insert(Action::Restart, KeyCode(allegro::KeyCode::R));
 		Self { controls: controls }
 	}
 

@@ -10,11 +10,11 @@ mod controls;
 mod error;
 mod game_state;
 mod map;
-//~ mod menu;
+mod menu;
 mod sfx;
 //~ mod spatial_grid;
-//~ mod ui;
 mod sprite;
+mod ui;
 mod utils;
 
 use crate::error::Result;
@@ -51,11 +51,10 @@ fn make_teleport_shader(disp: &mut Display) -> Result<sync::Weak<Shader>>
 	Ok(shader)
 }
 
-
 enum CurScreen
 {
 	Game(map::Map),
-	//~ Menu(menu::Menu),
+	Menu(menu::Menu),
 }
 
 fn real_main() -> Result<()>
@@ -83,7 +82,7 @@ fn real_main() -> Result<()>
 
 	let buffer_width = 800;
 	let buffer_height = 600;
-	
+
 	let teleport_shader = make_teleport_shader(&mut display)?;
 	let buffer1 = Bitmap::new(&state.core, buffer_width, buffer_height).unwrap();
 	let buffer2 = Bitmap::new(&state.core, buffer_width, buffer_height).unwrap();
@@ -120,16 +119,17 @@ fn real_main() -> Result<()>
 	let mut draw = true;
 	//~ let mut rng = thread_rng();
 
-	//~ let mut cur_screen = CurScreen::Menu(menu::Menu::new(
-	//~ &mut state,
-	//~ buffer_width as f32,
-	//~ buffer_height as f32,
-	//~ )?);
-	let mut cur_screen = CurScreen::Game(map::Map::new(
+	let mut cur_screen = CurScreen::Menu(menu::Menu::new(
 		&mut state,
 		buffer_width as f32,
 		buffer_height as f32,
 	)?);
+	//~ let mut cur_screen = CurScreen::Game(map::Map::new(
+	//~ &mut state,
+	//~ buffer_width as f32,
+	//~ buffer_height as f32,
+	//~ 0,
+	//~ )?);
 
 	let mut logics_without_draw = 0;
 	let mut old_fullscreen = state.options.fullscreen;
@@ -158,7 +158,7 @@ fn real_main() -> Result<()>
 			match &mut cur_screen
 			{
 				CurScreen::Game(map) => map.draw(&state)?,
-				//~ CurScreen::Menu(menu) => menu.draw(&state)?,
+				CurScreen::Menu(menu) => menu.draw(&state)?,
 			}
 
 			if state.options.vsync_method == 2
@@ -167,7 +167,7 @@ fn real_main() -> Result<()>
 			}
 
 			state.core.set_target_bitmap(Some(&buffer2));
-			
+
 			state
 				.core
 				.use_shader(Some(&*teleport_shader.upgrade().unwrap()))
@@ -181,14 +181,11 @@ fn real_main() -> Result<()>
 				.ok();
 			state
 				.core
-				.set_shader_uniform(
-					"swirl_amount",
-					&[state.swirl_amount][..],
-				)
+				.set_shader_uniform("swirl_amount", &[state.swirl_amount][..])
 				.ok();
-				
+
 			state.core.draw_bitmap(&buffer1, 0., 0., Flag::zero());
-			
+
 			state.core.set_target_bitmap(Some(display.get_backbuffer()));
 
 			state.core.clear_to_color(Color::from_rgb_f(0., 0., 0.));
@@ -225,7 +222,7 @@ fn real_main() -> Result<()>
 		let mut next_screen = match &mut cur_screen
 		{
 			CurScreen::Game(map) => map.input(&event, &mut state)?,
-			//~ CurScreen::Menu(menu) => menu.input(&event, &mut state)?,
+			CurScreen::Menu(menu) => menu.input(&event, &mut state)?,
 		};
 
 		match event
@@ -260,7 +257,7 @@ fn real_main() -> Result<()>
 				}
 
 				logics_without_draw += 1;
-				//~ state.sfx.update_sounds()?;
+				state.sfx.update_sounds()?;
 
 				if !state.paused
 				{
@@ -275,36 +272,23 @@ fn real_main() -> Result<()>
 		{
 			match next_screen
 			{
-				//~ NextScreen::Game(level, class, health, weapons, lives) =>
-				//~ {
-				//~ for other_level in &mut state.levels.levels
-				//~ {
-				//~ if level == other_level.filename
-				//~ {
-				//~ other_level.unlocked = true;
-				//~ }
-				//~ }
-				//~ utils::save_config("data/levels.cfg", &state.levels)?;
-				//~ cur_screen = CurScreen::Game(map::Map::new(
-				//~ &mut state,
-				//~ &level,
-				//~ class,
-				//~ health,
-				//~ weapons,
-				//~ lives,
-				//~ buffer_width as f32,
-				//~ buffer_height as f32,
-				//~ )?);
-				//~ }
-				//~ NextScreen::Menu =>
-				//~ {
-				//~ cur_screen = CurScreen::Menu(menu::Menu::new(
-				//~ &mut state,
-				//~ buffer_width as f32,
-				//~ buffer_height as f32,
-				//~ )?);
-				//~ state.hide_mouse = false;
-				//~ }
+				game_state::NextScreen::Game { seed } =>
+				{
+					cur_screen = CurScreen::Game(map::Map::new(
+						&mut state,
+						buffer_width as f32,
+						buffer_height as f32,
+						seed,
+					)?);
+				}
+				game_state::NextScreen::Menu =>
+				{
+					cur_screen = CurScreen::Menu(menu::Menu::new(
+						&mut state,
+						buffer_width as f32,
+						buffer_height as f32,
+					)?);
+				}
 				game_state::NextScreen::Quit =>
 				{
 					quit = true;

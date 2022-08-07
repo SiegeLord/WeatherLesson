@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::{atlas, controls, sprite, utils, sfx};
+use crate::{atlas, controls, sfx, sprite, utils};
 use allegro::*;
 use allegro_font::*;
 use allegro_image::*;
@@ -20,20 +20,16 @@ pub struct Options
 	pub vsync_method: i32,
 	pub sfx_volume: f32,
 	pub music_volume: f32,
-	//~ pub turn_sensitivity: f32,
 	pub controls: controls::Controls,
 }
 
 pub enum NextScreen
 {
-	//~ Game(
-	//~ String,
-	//~ PlayerClass,
-	//~ Option<components::Health>,
-	//~ Option<components::WeaponSet>,
-	//~ i32,
-	//~ ),
-	//~ Menu,
+	Game
+	{
+		seed: u64,
+	},
+	Menu,
 	Quit,
 }
 
@@ -46,11 +42,10 @@ pub struct GameState
 	pub ttf: TtfAddon,
 	pub tick: i64,
 	pub paused: bool,
-	
+
 	pub swirl_amount: f32,
-	
+
 	pub sfx: sfx::Sfx,
-	//~ pub hide_mouse: bool,
 	pub atlas: atlas::Atlas,
 	pub ui_font: Font,
 	pub number_font: Font,
@@ -58,7 +53,6 @@ pub struct GameState
 	pub draw_scale: f32,
 	pub display_width: f32,
 	pub display_height: f32,
-	//~ pub levels: Levels,
 	bitmaps: HashMap<String, Bitmap>,
 	sprites: HashMap<String, sprite::Sprite>,
 }
@@ -87,8 +81,6 @@ impl GameState
 			.load_ttf_font("data/Open 24 Display St.ttf", -48, TtfFlags::zero())
 			.map_err(|_| "Couldn't load 'data/Open 24 Display St.ttf'".to_string())?;
 
-		//~ let levels: Levels = utils::load_config("data/levels.cfg")?;
-
 		Ok(GameState {
 			options: options,
 			core: core,
@@ -101,7 +93,6 @@ impl GameState
 			ttf: ttf,
 			sfx: sfx,
 			paused: false,
-			//~ hide_mouse: false,
 			atlas: atlas::Atlas::new(2048),
 			ui_font: ui_font,
 			number_font: number_font,
@@ -109,7 +100,6 @@ impl GameState
 			display_width: 0.,
 			display_height: 0.,
 			swirl_amount: 0.,
-			//~ levels: levels,
 		})
 	}
 
