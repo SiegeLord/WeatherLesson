@@ -664,6 +664,7 @@ pub struct Map
 	subscreens: Vec<ui::SubScreen>,
 	ui_state: UIState,
 	seed: u64,
+	collision_alert: bool,
 
 	up_state: bool,
 	down_state: bool,
@@ -808,6 +809,7 @@ impl Map
 			subscreens: vec![],
 			ui_state: UIState::Regular,
 			seed: seed,
+			collision_alert: false,
 		})
 	}
 
@@ -825,6 +827,7 @@ impl Map
 		let mut spawn_water = None;
 		let mut rng = thread_rng();
 		let mut player_pos = None;
+		let mut player_vel = None;
 		if let Ok((pos, mut vel, mut water_col)) = self.world.query_one_mut::<(
 			&comps::Position,
 			&mut comps::Velocity,
@@ -832,6 +835,7 @@ impl Map
 		)>(self.player)
 		{
 			player_pos = Some(pos.pos);
+			player_vel = Some(vel.vel);
 			let left_right = self.left_state as i32 - (self.right_state as i32);
 			let up_down = self.up_state as i32 - (self.down_state as i32);
 
@@ -895,13 +899,14 @@ impl Map
 		}
 
 		// Collision.
+		let mushroom_height = 2.;
 		for (id, (pos, _)) in self
 			.world
 			.query_mut::<(&comps::Position, &comps::ExplodeOnCollision)>()
 		{
 			let mut do_explode = false;
 			let mushroom_height = get_mushroom(&self.mushrooms, pos.pos.xy())
-				.and_then(|_| Some(2.))
+				.and_then(|_| Some(mushroom_height))
 				.unwrap_or(0.);
 			if let Some(h) = get_height(&self.heightmap, pos.pos.xy())
 			{
@@ -919,6 +924,34 @@ impl Map
 			{
 				to_die.push(id);
 			}
+		}
+
+		// Collision alert.
+		self.collision_alert = false;
+		if let (Some(player_pos), Some(player_vel)) = (player_pos, player_vel)
+		{
+			let mut alert = false;
+			for dt in [0.2, 0.4, 0.6, 0.8, 1.]
+			{
+				let test_pos = player_pos + dt * player_vel;
+
+				let mushroom_height = get_mushroom(&self.mushrooms, test_pos.xy())
+					.and_then(|_| Some(mushroom_height))
+					.unwrap_or(0.);
+				if let Some(h) = get_height(&self.heightmap, test_pos.xy())
+				{
+					let h = h + mushroom_height;
+					if test_pos.z - h < 0.5
+					{
+						alert = true;
+					}
+				}
+				else
+				{
+					alert = true;
+				}
+			}
+			self.collision_alert = alert;
 		}
 
 		// Cloud.
@@ -1445,7 +1478,21 @@ impl Map
 
 		if self.ui_state == UIState::Regular
 		{
-			if !self.world.contains(self.player)
+			if self.world.contains(self.player)
+			{
+				if self.collision_alert
+				{
+					state.core.draw_text(
+						&state.ui_font,
+						Color::from_rgb_f(0.9, 0.3, 0.3),
+						self.display_width / 2.,
+						24.,
+						FontAlign::Centre,
+						"!! COLLISION IMMINENT !!",
+					);
+				}
+			}
+			else
 			{
 				state.core.draw_text(
 					&state.ui_font,
