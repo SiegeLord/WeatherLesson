@@ -67,3 +67,15 @@ pub struct ParticleSpawners
 {
 	pub spawners: Vec<ParticleSpawner>,
 }
+
+#[derive(Debug, Clone)]
+pub struct ExplodeOnCollision;
+
+#[derive(Debug, Clone)]
+pub struct AffectedByGravity;
+
+#[derive(Debug, Clone)]
+pub struct WaterCollector
+{
+	pub time_to_splash: f64,
+}

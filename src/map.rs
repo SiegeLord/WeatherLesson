@@ -329,6 +329,8 @@ fn spawn_player(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::En
 			],
 		},
 		comps::CastsShadow,
+		comps::ExplodeOnCollision,
+		comps::WaterCollector { time_to_splash: 0. },
 	))
 }
 
@@ -367,6 +369,71 @@ fn spawn_cloud(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::Ent
 		},
 		comps::CastsShadow,
 	))
+}
+
+fn spawn_splash(pos: Point3<f32>, creation_time: f64, world: &mut hecs::World) -> hecs::Entity
+{
+	world.spawn((
+		comps::Position { pos: pos, dir: 0. },
+		comps::Drawable {
+			kind: comps::DrawableKind::Animated {
+				sprite: "data/splash.cfg".to_string(),
+				start_time: creation_time,
+				total_duration: 0.5,
+			},
+		},
+		comps::TimeToDie {
+			time_to_die: creation_time + 0.5,
+		},
+	))
+}
+
+fn spawn_explosion(pos: Point3<f32>, creation_time: f64, world: &mut hecs::World) -> hecs::Entity
+{
+	let explosion = world.spawn((
+		comps::Position { pos: pos, dir: 0. },
+		comps::Drawable {
+			kind: comps::DrawableKind::Animated {
+				sprite: "data/explosion.cfg".to_string(),
+				start_time: creation_time,
+				total_duration: 0.5,
+			},
+		},
+		comps::TimeToDie {
+			time_to_die: creation_time + 0.5,
+		},
+	));
+
+	let mut rng = thread_rng();
+	for _ in 0..5
+	{
+		world.spawn((
+			comps::Position { pos: pos, dir: 0. },
+			comps::Velocity {
+				vel: Vector3::new(
+					rng.gen_range(-2.0..2.0),
+					rng.gen_range(-2.0..2.0),
+					rng.gen_range(3.0..5.0),
+				),
+				dir_vel: 0.,
+			},
+			comps::AffectedByGravity,
+			comps::ParticleSpawners {
+				spawners: vec![comps::ParticleSpawner {
+					offset: Vector3::new(0., 0., 0.),
+					spawn_delay: 0.1,
+					time_to_spawn: 0.,
+					duration: 1.,
+					sprite: "data/engine_particles.cfg".to_string(),
+				}],
+			},
+			comps::TimeToDie {
+				time_to_die: creation_time + 1.5,
+			},
+		));
+	}
+
+	explosion
 }
 
 fn get_height(heightmap: &[i32], pos: Point2<f32>) -> Option<f32>
@@ -438,6 +505,8 @@ impl Map
 		state.cache_sprite("data/terrain.cfg")?;
 		state.cache_sprite("data/plane.cfg")?;
 		state.cache_sprite("data/engine_particles.cfg")?;
+		state.cache_sprite("data/explosion.cfg")?;
+		state.cache_sprite("data/splash.cfg")?;
 
 		let heightmap = lower_heightmap(&smooth_heightmap(&diamond_square(size)));
 		print_heightmap(&heightmap);
@@ -487,6 +556,44 @@ impl Map
 			vel.vel = eng.power * Vector3::new(dir_vel.x, dir_vel.y, vel.vel.z);
 		}
 
+		// Collision.
+		let mut explosions = vec![];
+		for (id, (pos, _)) in self
+			.world
+			.query_mut::<(&comps::Position, &comps::ExplodeOnCollision)>()
+		{
+			let mut do_explode = false;
+			if let Some(h) = get_height(&self.heightmap, pos.pos.xy())
+			{
+				if pos.pos.z - h < 0.5
+				{
+					do_explode = true;
+				}
+			}
+			else
+			{
+				do_explode = true;
+			}
+			if do_explode
+			{
+				explosions.push(pos.pos.clone());
+				to_die.push(id);
+			}
+		}
+
+		for pos in explosions
+		{
+			spawn_explosion(pos, state.time(), &mut self.world);
+		}
+
+		// Gravity.
+		for (_, (vel, _)) in self
+			.world
+			.query_mut::<(&mut comps::Velocity, &comps::AffectedByGravity)>()
+		{
+			vel.vel.z -= utils::DT * 5.;
+		}
+
 		// Velocity.
 		for (_, (pos, vel)) in self
 			.world
@@ -494,6 +601,26 @@ impl Map
 		{
 			pos.pos += utils::DT * vel.vel;
 			pos.dir += utils::DT * vel.dir_vel;
+		}
+
+		// Water collection.
+		let mut add_splash = vec![];
+		for (_, (pos, water_collection)) in self
+			.world
+			.query_mut::<(&comps::Position, &mut comps::WaterCollector)>()
+		{
+			if let Some(h) = get_height(&self.heightmap, pos.pos.xy())
+			{
+				if h < 0.1 && pos.pos.z - h < 2. && state.time() > water_collection.time_to_splash
+				{
+					water_collection.time_to_splash = state.time() + 0.25;
+					add_splash.push(Point3::new(pos.pos.x, pos.pos.y, 0.01));
+				}
+			}
+		}
+		for pos in add_splash
+		{
+			spawn_splash(pos, state.time(), &mut self.world);
 		}
 
 		// Particle spawners.
@@ -628,10 +755,11 @@ impl Map
 			if let Some(h) = get_height(&self.heightmap, pos.pos.xy())
 			{
 				let xy = world_to_screen(Point3::new(pos.pos.x, pos.pos.y, h));
+				let xy = utils::round_point(xy + Vector2::new(dx, dy));
 
 				state.prim.draw_filled_ellipse(
-					dx + xy.x,
-					dy + xy.y,
+					xy.x,
+					xy.y,
 					16.,
 					8.,
 					Color::from_rgba_f(0., 0., 0., 0.4),
