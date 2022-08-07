@@ -374,16 +374,22 @@ fn spawn_particle(
 	))
 }
 
-fn spawn_cloud(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::Entity
+fn spawn_cloud(pos: Point3<f32>, world: &mut hecs::World) -> hecs::Entity
 {
 	world.spawn((
-		comps::Position { pos: pos, dir: dir },
+		comps::Position { pos: pos, dir: 0. },
+		comps::Velocity {
+			vel: Vector3::new(0.1, 0.2, 0.),
+			dir_vel: 0.,
+		},
 		comps::Drawable {
-			kind: comps::DrawableKind::Oriented {
-				sprite: "data/plane.cfg".to_string(),
+			kind: comps::DrawableKind::Fixed {
+				sprite: "data/cloud.cfg".to_string(),
+				variant: 0,
 			},
 		},
 		comps::CastsShadow,
+		comps::Cloud,
 	))
 }
 
@@ -392,7 +398,7 @@ fn spawn_mushroom(pos: Point3<f32>, world: &mut hecs::World) -> hecs::Entity
 	world.spawn((
 		comps::Position { pos: pos, dir: 0. },
 		comps::Drawable {
-			kind: comps::DrawableKind::Mushroom {
+			kind: comps::DrawableKind::Fixed {
 				sprite: "data/mushroom.cfg".to_string(),
 				variant: 0,
 			},
@@ -579,6 +585,53 @@ fn get_mushroom(mushrooms: &[Option<hecs::Entity>], pos: Point2<f32>) -> Option<
 	}
 }
 
+#[rustfmt::skip]
+fn add_word(mushroom_map: &mut [(bool, f32)])
+{
+	let mut rng = thread_rng();
+	
+	let size = (mushroom_map.len() as f32).sqrt() as i32;
+	
+	let words: Vec<Vec<Vec<i32>>> = vec![
+		vec![
+			vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,],
+			vec![0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0,],
+			vec![0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0,],
+			vec![0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 0,],
+			vec![0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0,],
+			vec![0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0,],
+			vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,],
+		],
+		vec![
+			vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,],
+			vec![0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0,],
+			vec![0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0,],
+			vec![0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0,],
+			vec![0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0,],
+			vec![0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0,],
+			vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,],
+		],
+	];
+	
+	let word = &words[rng.gen_range(0..words.len())];
+	let num_rows = word.len() as i32;
+	let num_cols = word[0].len() as i32;
+	let dx = rng.gen_range(0..size - num_rows);
+	let dy = rng.gen_range(0..size - num_cols);
+	
+	for x in 0..num_rows
+	{
+		for y in 0..num_cols
+		{
+			let idx = ((x + dx) + (y + dy) * size) as usize;
+			if mushroom_map[idx].1 > 0.5
+			{
+				mushroom_map[idx].0 = word[x as usize][(num_cols - y - 1) as usize] == 1;
+			}
+		}
+	}
+}
+
 pub struct Map
 {
 	heightmap: Vec<i32>,
@@ -605,21 +658,24 @@ impl Map
 	) -> Result<Self>
 	{
 		let size = 5;
+		let real_size = 2i32.pow(size as u32) + 1;
+
 		let mut world = hecs::World::default();
 
 		let player_pos = Point3::new(0., 2., 10.);
 		let player = spawn_player(player_pos, 0., &mut world);
 
-		for y in 5..10
+		let mut rng = thread_rng();
+		for _ in 0..16
 		{
-			for x in 5..10
-			{
-				spawn_cloud(
-					Point3::new(x as f32, y as f32, x as f32 + 5.),
-					x as f32 + y as f32 * 0.1,
-					&mut world,
-				);
-			}
+			spawn_cloud(
+				Point3::new(
+					rng.gen_range(0..real_size) as f32,
+					rng.gen_range(0..real_size) as f32,
+					10.,
+				),
+				&mut world,
+			);
 		}
 
 		state.cache_sprite("data/terrain.cfg")?;
@@ -630,34 +686,46 @@ impl Map
 		state.cache_sprite("data/water_blob.cfg")?;
 		state.cache_sprite("data/mushroom.cfg")?;
 		state.cache_sprite("data/fire.cfg")?;
+		state.cache_sprite("data/cloud.cfg")?;
 		//~ state.atlas.dump_pages();
 
 		let heightmap = lower_heightmap(&smooth_heightmap(&diamond_square(size)));
-		let mut mushrooms = Vec::with_capacity(heightmap.len());
+		let mut mushroom_map = vec![(false, 0.); heightmap.len()];
 
-		let real_size = 2i32.pow(size as u32) + 1;
-		let mut rng = thread_rng();
 		for y in 0..real_size - 1
 		{
 			for x in 0..real_size - 1
 			{
 				let h = get_height(&heightmap, Point2::new(x as f32, y as f32)).unwrap();
-				mushrooms.push(
-					if h > 1. && rng.gen_bool(0.3)
+				mushroom_map[(x + real_size * y) as usize] = (h > 0.5 && rng.gen_bool(0.3), h);
+			}
+		}
+
+		for _ in 0..size * size / 4
+		{
+			add_word(&mut mushroom_map);
+		}
+
+		let mut mushrooms = vec![None; mushroom_map.len()];
+		for y in 0..real_size - 1
+		{
+			for x in 0..real_size - 1
+			{
+				let (has_mushroom, h) = mushroom_map[(x + real_size * y) as usize];
+				mushrooms[(x + real_size * y) as usize] = if has_mushroom
+				{
+					let mushroom =
+						spawn_mushroom(Point3::new(x as f32, y as f32, h as f32), &mut world);
+					if rng.gen_bool(0.1)
 					{
-						let mushroom =
-							spawn_mushroom(Point3::new(x as f32, y as f32, h as f32), &mut world);
-						if rng.gen_bool(0.5)
-						{
-							change_on_fire(mushroom, true, &mut world)?;
-						}
-						Some(mushroom)
+						change_on_fire(mushroom, true, &mut world)?;
 					}
-					else
-					{
-						None
-					},
-				);
+					Some(mushroom)
+				}
+				else
+				{
+					None
+				};
 			}
 		}
 		print_heightmap(&heightmap);
@@ -782,6 +850,15 @@ impl Map
 			{
 				to_die.push(id);
 			}
+		}
+
+		// Cloud.
+		for (id, (pos, _)) in self
+			.world
+			.query_mut::<(&mut comps::Position, &comps::Cloud)>()
+		{
+			pos.pos.x = pos.pos.x.rem_euclid(self.size as f32);
+			pos.pos.y = pos.pos.y.rem_euclid(self.size as f32);
 		}
 
 		// Gravity.
@@ -1094,7 +1171,7 @@ impl Map
 							% num_orientations) % num_orientations;
 					(sprite.clone(), variant)
 				}
-				comps::DrawableKind::Mushroom { sprite, variant } => (sprite.clone(), *variant),
+				comps::DrawableKind::Fixed { sprite, variant } => (sprite.clone(), *variant),
 				comps::DrawableKind::Animated {
 					sprite,
 					start_time,

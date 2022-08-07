@@ -39,7 +39,7 @@ pub enum DrawableKind
 		total_duration: f64,
 		once: bool,
 	},
-	Mushroom
+	Fixed
 	{
 		sprite: String, variant: i32
 	},
@@ -90,6 +90,9 @@ pub enum ExplosionKind
 
 #[derive(Debug, Clone)]
 pub struct ExplodeOnCollision;
+
+#[derive(Debug, Clone)]
+pub struct Cloud;
 
 #[derive(Debug, Clone)]
 pub struct AffectedByGravity;
