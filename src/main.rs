@@ -109,7 +109,7 @@ fn real_main() -> Result<()>
 
 	let mut logics_without_draw = 0;
 	let mut old_fullscreen = state.options.fullscreen;
-	//~ let mut prev_frame_start = state.core.get_time();
+	let mut prev_frame_start = state.core.get_time();
 
 	timer.start();
 	while !quit
@@ -128,7 +128,7 @@ fn real_main() -> Result<()>
 				.floor();
 			}
 
-			//~ let frame_start = state.core.get_time();
+			let frame_start = state.core.get_time();
 			state.core.set_target_bitmap(Some(&buffer));
 
 			match &mut cur_screen
@@ -166,11 +166,11 @@ fn real_main() -> Result<()>
 
 			state.core.flip_display();
 
-			//~ if state.tick % 20 == 0
-			//~ {
-			//~ println!("FPS: {}", 1. / (frame_start - prev_frame_start));
-			//~ }
-			//~ prev_frame_start = frame_start;
+			if state.tick % 120 == 0
+			{
+				println!("FPS: {:.2}", 1. / (frame_start - prev_frame_start));
+			}
+			prev_frame_start = frame_start;
 			logics_without_draw = 0;
 		}
 

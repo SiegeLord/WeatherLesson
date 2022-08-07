@@ -315,6 +315,7 @@ fn spawn_player(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::En
 			spawners: vec![
 				comps::ParticleSpawner {
 					offset: Vector3::new(-0.3, 0.2, -0.4),
+					kind: comps::ParticleKind::Stationary,
 					spawn_delay: 0.15,
 					time_to_spawn: 0.,
 					duration: 1.,
@@ -322,6 +323,7 @@ fn spawn_player(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::En
 				},
 				comps::ParticleSpawner {
 					offset: Vector3::new(-0.3, -0.2, -0.4),
+					kind: comps::ParticleKind::Stationary,
 					spawn_delay: 0.15,
 					time_to_spawn: 0.,
 					duration: 1.,
@@ -330,13 +332,19 @@ fn spawn_player(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::En
 			],
 		},
 		comps::CastsShadow,
-		comps::ExplodeOnCollision {
-			kind: comps::ExplosionKind::Explosion,
+		comps::ExplodeOnCollision,
+		comps::OnDeathEffects {
+			effects: vec![
+				comps::OnDeathEffect::SplashWater,
+				comps::OnDeathEffect::Explosion {
+					kind: comps::ExplosionKind::Explosion,
+				},
+			],
 		},
 		comps::WaterCollector {
 			time_to_splash: 0.,
 			time_to_drop: 0.,
-			water_amount: 0,
+			water_amount: 99,
 		},
 	))
 }
@@ -379,6 +387,59 @@ fn spawn_cloud(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::Ent
 	))
 }
 
+fn spawn_mushroom(pos: Point3<f32>, world: &mut hecs::World) -> hecs::Entity
+{
+	world.spawn((
+		comps::Position { pos: pos, dir: 0. },
+		comps::Drawable {
+			kind: comps::DrawableKind::Mushroom {
+				sprite: "data/mushroom.cfg".to_string(),
+				variant: 0,
+			},
+		},
+		comps::CastsShadow,
+		comps::Mushroom {
+			on_fire: false,
+			health: 1.,
+		},
+	))
+}
+
+fn change_on_fire(mushroom: hecs::Entity, on_fire: bool, world: &mut hecs::World) -> Result<()>
+{
+	let mut change_component = false;
+	if let Ok(mut mushroom) = world.get::<&mut comps::Mushroom>(mushroom)
+	{
+		let old_on_fire = mushroom.on_fire;
+		mushroom.on_fire = on_fire;
+		change_component = old_on_fire != mushroom.on_fire;
+	}
+	if change_component
+	{
+		if on_fire
+		{
+			world.insert_one(
+				mushroom,
+				comps::ParticleSpawners {
+					spawners: vec![comps::ParticleSpawner {
+						offset: Vector3::new(0., 0., 1.),
+						kind: comps::ParticleKind::Fire,
+						spawn_delay: 0.15,
+						time_to_spawn: 0.,
+						duration: 1.,
+						sprite: "data/fire.cfg".to_string(),
+					}],
+				},
+			)?;
+		}
+		else
+		{
+			world.remove_one::<comps::ParticleSpawners>(mushroom)?;
+		}
+	}
+	Ok(())
+}
+
 fn spawn_splash(pos: Point3<f32>, creation_time: f64, world: &mut hecs::World) -> hecs::Entity
 {
 	world.spawn((
@@ -418,8 +479,14 @@ fn spawn_water_blob(
 			},
 		},
 		comps::CastsShadow,
-		comps::ExplodeOnCollision {
-			kind: comps::ExplosionKind::Splash,
+		comps::ExplodeOnCollision,
+		comps::OnDeathEffects {
+			effects: vec![
+				comps::OnDeathEffect::SplashWater,
+				comps::OnDeathEffect::Explosion {
+					kind: comps::ExplosionKind::Splash,
+				},
+			],
 		},
 	))
 }
@@ -458,6 +525,7 @@ fn spawn_explosion(pos: Point3<f32>, creation_time: f64, world: &mut hecs::World
 			comps::ParticleSpawners {
 				spawners: vec![comps::ParticleSpawner {
 					offset: Vector3::new(0., 0., 0.),
+					kind: comps::ParticleKind::Stationary,
 					spawn_delay: 0.1,
 					time_to_spawn: 0.,
 					duration: 1.,
@@ -499,9 +567,25 @@ fn get_height(heightmap: &[i32], pos: Point2<f32>) -> Option<f32>
 	}
 }
 
+fn get_mushroom(mushrooms: &[Option<hecs::Entity>], pos: Point2<f32>) -> Option<hecs::Entity>
+{
+	let size = (mushrooms.len() as f32).sqrt() as i32;
+	let x = (pos.x + 0.5) as i32;
+	let y = (pos.y + 0.5) as i32;
+	if x >= 0 && y >= 0 && x < size && y < size
+	{
+		mushrooms[(x + y * size) as usize]
+	}
+	else
+	{
+		None
+	}
+}
+
 pub struct Map
 {
 	heightmap: Vec<i32>,
+	mushrooms: Vec<Option<hecs::Entity>>,
 	size: i32,
 	display_width: f32,
 	display_height: f32,
@@ -546,13 +630,44 @@ impl Map
 		state.cache_sprite("data/explosion.cfg")?;
 		state.cache_sprite("data/splash.cfg")?;
 		state.cache_sprite("data/water_blob.cfg")?;
+		state.cache_sprite("data/mushroom.cfg")?;
+		state.cache_sprite("data/fire.cfg")?;
+		//~ state.atlas.dump_pages();
 
 		let heightmap = lower_heightmap(&smooth_heightmap(&diamond_square(size)));
+		let mut mushrooms = Vec::with_capacity(heightmap.len());
+
+		let real_size = 2i32.pow(size as u32) + 1;
+		let mut rng = thread_rng();
+		for y in 0..real_size - 1
+		{
+			for x in 0..real_size - 1
+			{
+				let h = get_height(&heightmap, Point2::new(x as f32, y as f32)).unwrap();
+				mushrooms.push(
+					if h > 1. && rng.gen_bool(0.3)
+					{
+						let mushroom =
+							spawn_mushroom(Point3::new(x as f32, y as f32, h as f32), &mut world);
+						if rng.gen_bool(0.5)
+						{
+							change_on_fire(mushroom, true, &mut world)?;
+						}
+						Some(mushroom)
+					}
+					else
+					{
+						None
+					},
+				);
+			}
+		}
 		print_heightmap(&heightmap);
 
 		Ok(Self {
 			heightmap: heightmap,
-			size: 2i32.pow(size as u32) + 1,
+			mushrooms: mushrooms,
+			size: real_size,
 			display_width: display_width,
 			display_height: display_height,
 			camera_pos: player_pos,
@@ -644,14 +759,17 @@ impl Map
 		}
 
 		// Collision.
-		let mut explosions = vec![];
-		for (id, (pos, explode)) in self
+		for (id, (pos, _)) in self
 			.world
 			.query_mut::<(&comps::Position, &comps::ExplodeOnCollision)>()
 		{
 			let mut do_explode = false;
+			let mushroom_height = get_mushroom(&self.mushrooms, pos.pos.xy())
+				.and_then(|_| Some(2.))
+				.unwrap_or(0.);
 			if let Some(h) = get_height(&self.heightmap, pos.pos.xy())
 			{
+				let h = h + mushroom_height;
 				if pos.pos.z - h < 0.5
 				{
 					do_explode = true;
@@ -663,23 +781,7 @@ impl Map
 			}
 			if do_explode
 			{
-				explosions.push((pos.pos.clone(), explode.kind));
 				to_die.push(id);
-			}
-		}
-
-		for (pos, kind) in explosions
-		{
-			match kind
-			{
-				comps::ExplosionKind::Explosion =>
-				{
-					spawn_explosion(pos, state.time(), &mut self.world);
-				}
-				comps::ExplosionKind::Splash =>
-				{
-					spawn_splash(pos, state.time(), &mut self.world);
-				}
 			}
 		}
 
@@ -723,7 +825,7 @@ impl Map
 				if h < 0.1 && pos.pos.z - h < 2. && state.time() > water_col.time_to_splash
 				{
 					water_col.time_to_splash = state.time() + 0.25;
-					water_col.water_amount += 2;
+					water_col.water_amount += 5;
 					add_splash.push(Point3::new(pos.pos.x, pos.pos.y, 0.01));
 				}
 			}
@@ -746,9 +848,17 @@ impl Map
 					let offset_xy = Rotation2::new(pos.dir) * spawner.offset.xy();
 					let offset = Vector3::new(offset_xy.x, offset_xy.y, spawner.offset.z);
 
+					let vel = match spawner.kind
+					{
+						comps::ParticleKind::Stationary => Vector3::zeros(),
+						comps::ParticleKind::Fire =>
+						{
+							Vector3::new(rng.gen_range(-0.5..0.5), rng.gen_range(-0.5..0.5), 5.)
+						}
+					};
 					to_spawn.push((
 						pos.pos + offset,
-						Vector3::<f32>::zeros(),
+						vel,
 						spawner.sprite.clone(),
 						spawner.duration,
 					));
@@ -768,6 +878,57 @@ impl Map
 			{
 				to_die.push(id);
 			}
+		}
+
+		// On death effects
+		let mut explosions = vec![];
+		let mut extinguish = vec![];
+		for id in &to_die
+		{
+			if let Ok((pos, on_death_effects)) = self
+				.world
+				.query_one_mut::<(&comps::Position, &comps::OnDeathEffects)>(*id)
+			{
+				for effect in &on_death_effects.effects
+				{
+					match effect
+					{
+						comps::OnDeathEffect::Explosion { kind } =>
+						{
+							explosions.push((pos.pos, *kind))
+						}
+						comps::OnDeathEffect::SplashWater =>
+						{
+							if let Some(mushroom) = get_mushroom(&self.mushrooms, pos.pos.xy())
+							{
+								extinguish.push(mushroom);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Explosions
+		for (pos, kind) in explosions
+		{
+			match kind
+			{
+				comps::ExplosionKind::Explosion =>
+				{
+					spawn_explosion(pos, state.time(), &mut self.world);
+				}
+				comps::ExplosionKind::Splash =>
+				{
+					spawn_splash(pos, state.time(), &mut self.world);
+				}
+			}
+		}
+
+		// Extinguish
+		for mushroom in extinguish
+		{
+			change_on_fire(mushroom, false, &mut self.world)?;
 		}
 
 		// Remove dead entities
@@ -903,6 +1064,7 @@ impl Map
 							% num_orientations) % num_orientations;
 					(sprite.clone(), variant)
 				}
+				comps::DrawableKind::Mushroom { sprite, variant } => (sprite.clone(), *variant),
 				comps::DrawableKind::Animated {
 					sprite,
 					start_time,

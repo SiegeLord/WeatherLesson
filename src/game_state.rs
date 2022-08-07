@@ -100,7 +100,7 @@ impl GameState
 			//~ sfx: sfx,
 			paused: false,
 			//~ hide_mouse: false,
-			atlas: atlas::Atlas::new(4096),
+			atlas: atlas::Atlas::new(2048),
 			ui_font: ui_font,
 			number_font: number_font,
 			draw_scale: 1.,

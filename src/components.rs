@@ -39,6 +39,10 @@ pub enum DrawableKind
 		total_duration: f64,
 		once: bool,
 	},
+	Mushroom
+	{
+		sprite: String, variant: i32
+	},
 }
 
 #[derive(Debug, Clone)]
@@ -54,9 +58,17 @@ pub struct TimeToDie
 }
 
 #[derive(Debug, Clone)]
+pub enum ParticleKind
+{
+	Stationary,
+	Fire,
+}
+
+#[derive(Debug, Clone)]
 pub struct ParticleSpawner
 {
 	pub offset: Vector3<f32>,
+	pub kind: ParticleKind,
 	pub spawn_delay: f64,
 	pub time_to_spawn: f64,
 	pub duration: f64,
@@ -77,10 +89,7 @@ pub enum ExplosionKind
 }
 
 #[derive(Debug, Clone)]
-pub struct ExplodeOnCollision
-{
-	pub kind: ExplosionKind,
-}
+pub struct ExplodeOnCollision;
 
 #[derive(Debug, Clone)]
 pub struct AffectedByGravity;
@@ -94,4 +103,27 @@ pub struct WaterCollector
 	pub time_to_splash: f64,
 	pub time_to_drop: f64,
 	pub water_amount: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct Mushroom
+{
+	pub on_fire: bool,
+	pub health: f32,
+}
+
+#[derive(Debug, Clone)]
+pub enum OnDeathEffect
+{
+	Explosion
+	{
+		kind: ExplosionKind,
+	},
+	SplashWater,
+}
+
+#[derive(Debug, Clone)]
+pub struct OnDeathEffects
+{
+	pub effects: Vec<OnDeathEffect>,
 }
