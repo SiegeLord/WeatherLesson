@@ -746,11 +746,11 @@ pub struct MainMenu
 
 impl MainMenu
 {
-	pub fn new(_display_width: f32, display_height: f32) -> Self
+	pub fn new(display_width: f32, display_height: f32) -> Self
 	{
 		let w = 128.;
 		let h = 32.;
-		let cx = 128.;
+		let cx = display_width / 2.;
 		let cy = display_height / 2.;
 
 		Self {
@@ -799,12 +799,6 @@ impl MainMenu
 
 	pub fn draw(&self, state: &game_state::GameState)
 	{
-		//~ state.core.draw_bitmap(
-		//~ state.get_bitmap("data/main_menu.png").unwrap(),
-		//~ 0.,
-		//~ 0.,
-		//~ Flag::zero(),
-		//~ );
 		self.widgets.draw(state);
 	}
 
