@@ -398,10 +398,7 @@ fn spawn_mushroom(pos: Point3<f32>, world: &mut hecs::World) -> hecs::Entity
 			},
 		},
 		comps::CastsShadow,
-		comps::Mushroom {
-			on_fire: false,
-			health: 1.,
-		},
+		comps::Mushroom { on_fire: false },
 	))
 }
 
@@ -592,6 +589,7 @@ pub struct Map
 	camera_pos: Point3<f32>,
 	world: hecs::World,
 	player: hecs::Entity,
+	time_to_spread_fire: f64,
 
 	up_state: bool,
 	down_state: bool,
@@ -678,6 +676,7 @@ impl Map
 			left_state: false,
 			right_state: false,
 			drop_state: false,
+			time_to_spread_fire: state.time() + 5.,
 		})
 	}
 
@@ -727,7 +726,7 @@ impl Map
 					spawn_water = Some((
 						pos.pos + Vector3::new(0., 0., -1.),
 						vel.vel
-							+ Vector3::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0), 0.),
+							+ Vector3::new(rng.gen_range(-0.1..0.1), rng.gen_range(-0.1..0.1), 0.),
 					));
 				}
 			}
@@ -798,10 +797,14 @@ impl Map
 			.world
 			.query_mut::<(&mut comps::Velocity, &comps::AffectedByGravity)>()
 		{
-			let friction = vel.vel.xy().normalize();
-			let friction = 0.5 * friction * vel.vel.xy().norm_squared();
-			vel.vel.x -= utils::DT * friction.x;
-			vel.vel.y -= utils::DT * friction.y;
+			let norm = vel.vel.xy().norm();
+			if norm > 0.
+			{
+				let friction = vel.vel.xy().normalize();
+				let friction = 0.5 * friction * vel.vel.xy().norm_squared();
+				vel.vel.x -= utils::DT * friction.x;
+				vel.vel.y -= utils::DT * friction.y;
+			}
 		}
 
 		// Velocity.
@@ -869,6 +872,33 @@ impl Map
 		for (pos, vel, sprite, duration) in to_spawn
 		{
 			spawn_particle(pos, vel, sprite, state.time(), duration, &mut self.world);
+		}
+
+		// Fire spread
+		let mut ignite = vec![];
+		if state.time() > self.time_to_spread_fire
+		{
+			for (_, (pos, mushroom)) in self
+				.world
+				.query_mut::<(&comps::Position, &comps::Mushroom)>()
+			{
+				if mushroom.on_fire && rng.gen_bool(0.5)
+				{
+					for [dx, dy] in [[-1., 0.], [1., 0.], [0., 1.], [0., -1.]]
+					{
+						if let Some(mushroom) =
+							get_mushroom(&self.mushrooms, pos.pos.xy() + Vector2::new(dx, dy))
+						{
+							ignite.push(mushroom);
+						}
+					}
+				}
+			}
+			self.time_to_spread_fire = state.time() + 15.;
+		}
+		for mushroom in ignite
+		{
+			change_on_fire(mushroom, true, &mut self.world)?;
 		}
 
 		// Time to die

@@ -109,7 +109,6 @@ pub struct WaterCollector
 pub struct Mushroom
 {
 	pub on_fire: bool,
-	pub health: f32,
 }
 
 #[derive(Debug, Clone)]
