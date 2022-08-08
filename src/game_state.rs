@@ -75,11 +75,11 @@ impl GameState
 		let sfx = sfx::Sfx::new(options.sfx_volume, options.music_volume, &core)?;
 
 		let ui_font = ttf
-			.load_ttf_font("data/GAMEPLAY-1987.ttf", 16, TtfFlags::zero())
-			.map_err(|_| "Couldn't load 'data/GAMEPLAY-1987.ttf'".to_string())?;
+			.load_ttf_font("data/advanced_pixel_lcd-7.ttf", -20, TtfFlags::zero())
+			.map_err(|_| "Couldn't load 'data/advanced_pixel_lcd-7.ttf'".to_string())?;
 		let number_font = ttf
-			.load_ttf_font("data/Open 24 Display St.ttf", -48, TtfFlags::zero())
-			.map_err(|_| "Couldn't load 'data/Open 24 Display St.ttf'".to_string())?;
+			.load_ttf_font("data/advanced_pixel_lcd-7.ttf", -20, TtfFlags::zero())
+			.map_err(|_| "Couldn't load 'data/advanced_pixel_lcd-7.ttf'".to_string())?;
 
 		Ok(GameState {
 			options: options,

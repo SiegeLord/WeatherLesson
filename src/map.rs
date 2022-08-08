@@ -1462,14 +1462,14 @@ impl Map
 				Color::from_rgb_f(0.4, 0.4, 0.8),
 				48.,
 				24.,
-				FontAlign::Centre,
+				FontAlign::Left,
 				"WATER",
 			);
 
 			state.core.draw_text(
 				&state.number_font,
 				Color::from_rgb_f(0.4, 0.8, 0.4),
-				96.,
+				256.,
 				24.,
 				FontAlign::Centre,
 				&format!("{:0>2}", water_col.water_amount),
@@ -1494,14 +1494,22 @@ impl Map
 			}
 			else
 			{
+				state.prim.draw_filled_rectangle(
+					0.,
+					0.,
+					self.display_width,
+					self.display_height,
+					Color::from_rgba_f(0., 0., 0., 0.5),
+				);
+				
 				state.core.draw_text(
 					&state.ui_font,
-					Color::from_rgb_f(0.4, 0.4, 0.8),
+					Color::from_rgb_f(0.7, 0.7, 0.9),
 					self.display_width / 2.,
 					self.display_height / 2.,
 					FontAlign::Centre,
 					&format!(
-						"CRASHED! PRESS {} TO RESTART.",
+						"CRASHED! PRESS {} TO RESTART",
 						state
 							.options
 							.controls

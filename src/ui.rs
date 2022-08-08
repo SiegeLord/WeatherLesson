@@ -64,7 +64,7 @@ impl Button
 		}
 		else
 		{
-			Color::from_rgb_f(0.8, 0.8, 0.5)
+			Color::from_rgb_f(0.8, 0.6, 0.4)
 		};
 
 		state.core.draw_text(
@@ -164,7 +164,7 @@ impl Toggle
 		}
 		else
 		{
-			Color::from_rgb_f(0.8, 0.8, 0.5)
+			Color::from_rgb_f(0.8, 0.6, 0.4)
 		};
 
 		state.core.draw_text(
@@ -271,24 +271,26 @@ impl Slider
 		}
 		else
 		{
-			Color::from_rgb_f(0.8, 0.8, 0.5)
+			Color::from_rgb_f(0.8, 0.6, 0.4)
 		};
 
 		let w = self.width();
 		let cursor_x = self.loc.x - w / 2. + w * self.cur_pos / self.max_pos;
 		let start_x = self.loc.x - w / 2.;
 		let end_x = self.loc.x + w / 2.;
-		if cursor_x - start_x > 16.
+		
+		let ww = 48.;
+		if cursor_x - start_x > ww
 		{
 			state
 				.prim
-				.draw_line(start_x, self.loc.y, cursor_x - 16., self.loc.y, c_ui, 4.);
+				.draw_line(start_x, self.loc.y, cursor_x - ww, self.loc.y, c_ui, 4.);
 		}
-		if end_x - cursor_x > 16.
+		if end_x - cursor_x > ww
 		{
 			state
 				.prim
-				.draw_line(cursor_x + 16., self.loc.y, end_x, self.loc.y, c_ui, 4.);
+				.draw_line(cursor_x + ww, self.loc.y, end_x, self.loc.y, c_ui, 4.);
 		}
 		//state.prim.draw_filled_circle(self.loc.x - w / 2. + w * self.cur_pos / self.max_pos, self.loc.y, 8., c_ui);
 		state.core.draw_text(
@@ -406,7 +408,7 @@ impl Label
 	{
 		state.core.draw_text(
 			&state.ui_font,
-			Color::from_rgb_f(0.6, 0.6, 0.4),
+			Color::from_rgb_f(0.6, 0.4, 0.2),
 			self.loc.x,
 			self.loc.y - state.ui_font.get_line_height() as f32 / 2.,
 			FontAlign::Centre,
@@ -819,7 +821,7 @@ impl ControlsMenu
 	pub fn new(display_width: f32, display_height: f32, state: &game_state::GameState) -> Self
 	{
 		let w = 256.;
-		let h = 16.;
+		let h = 32.;
 		let cx = display_width / 2.;
 		let cy = display_height / 2.;
 
@@ -862,7 +864,7 @@ impl ControlsMenu
 			widgets: WidgetList::new(
 				cx,
 				cy,
-				h,
+				2. * h,
 				h,
 				&widgets.iter().map(|r| &r[..]).collect::<Vec<_>>(),
 			),
@@ -989,7 +991,7 @@ impl OptionsMenu
 	pub fn new(display_width: f32, display_height: f32, state: &game_state::GameState) -> Self
 	{
 		let w = 256.;
-		let h = 16.;
+		let h = 32.;
 		let cx = display_width / 2.;
 		let cy = display_height / 2.;
 
@@ -1044,7 +1046,7 @@ impl OptionsMenu
 			widgets: WidgetList::new(
 				cx,
 				cy,
-				h,
+				2. * h,
 				h,
 				&widgets.iter().map(|r| &r[..]).collect::<Vec<_>>(),
 			),
