@@ -126,9 +126,19 @@ impl Sfx
 		Ok(())
 	}
 
+	pub fn play_continuous_sound(&mut self, name: &str, volume: f32) -> Result<SampleInstance>
+	{
+		self.cache_sample(name)?;
+		let sample = self.samples.get(name).unwrap();
+		let instance = self
+			.sink
+			.play_sample(sample, volume, None, 1., Playmode::Loop)
+			.map_err(|_| "Couldn't play sound".to_string())?;
+		Ok(instance)
+	}
+
 	pub fn play_positional_sound(
-		&mut self, name: &str, sound_pos: Point2<f32>, camera_pos: Point2<f32>, dir: f32,
-		volume: f32,
+		&mut self, name: &str, sound_pos: Point2<f32>, camera_pos: Point2<f32>, volume: f32,
 	) -> Result<()>
 	{
 		self.cache_sample(name)?;
@@ -137,14 +147,10 @@ impl Sfx
 		{
 			let sample = self.samples.get(name).unwrap();
 
-			let dist = (sound_pos - camera_pos).norm();
-			let volume = utils::clamp(self.sfx_volume * volume * 40000. / (dist * dist), 0., 1.);
+			let dist_sq = (sound_pos - camera_pos).norm_squared();
+			let volume = utils::clamp(self.sfx_volume * volume * 40000. / dist_sq, 0., 1.);
 			let diff = sound_pos - camera_pos;
-			let diff = diff / (diff.norm() + 1e-3);
-
-			let dir_vec = utils::dir_vec3(dir).xz();
-			let left = Vector2::new(-dir_vec.y, dir_vec.x);
-			let pan = utils::clamp(left.dot(&diff), -1., 1.);
+			let pan = diff.x / (diff.x.powf(2.) + 100.0_f32.powf(2.)).sqrt();
 
 			let instance = self
 				.sink

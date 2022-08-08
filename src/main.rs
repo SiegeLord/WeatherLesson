@@ -133,6 +133,7 @@ fn real_main() -> Result<()>
 
 	let mut logics_without_draw = 0;
 	let mut old_fullscreen = state.options.fullscreen;
+	let mut old_mouse_hide = state.hide_mouse;
 	let mut prev_frame_start = state.core.get_time();
 
 	timer.start();
@@ -250,6 +251,14 @@ fn real_main() -> Result<()>
 					}
 				}
 
+				if old_mouse_hide != state.hide_mouse
+				{
+					old_mouse_hide = state.hide_mouse;
+					display
+						.show_cursor(!state.hide_mouse)
+						.map_err(|_| "Could not hide cursor.".to_string())?;
+				}
+
 				if old_fullscreen != state.options.fullscreen
 				{
 					display.set_flag(FULLSCREEN_WINDOW, state.options.fullscreen);
@@ -272,13 +281,17 @@ fn real_main() -> Result<()>
 		{
 			match next_screen
 			{
-				game_state::NextScreen::Game { seed } =>
+				game_state::NextScreen::Game {
+					seed,
+					restart_music,
+				} =>
 				{
 					cur_screen = CurScreen::Game(map::Map::new(
 						&mut state,
 						buffer_width as f32,
 						buffer_height as f32,
 						seed,
+						restart_music,
 					)?);
 				}
 				game_state::NextScreen::Menu =>

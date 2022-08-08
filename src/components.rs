@@ -23,7 +23,10 @@ pub struct FixedEngine
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct CastsShadow;
+pub struct CastsShadow
+{
+	pub size: i32,
+}
 
 #[derive(Debug, Clone)]
 pub enum DrawableKind
@@ -89,7 +92,10 @@ pub enum ExplosionKind
 }
 
 #[derive(Debug, Clone)]
-pub struct ExplodeOnCollision;
+pub struct ExplodeOnCollision
+{
+	pub out_of_bounds_ok: bool,
+}
 
 #[derive(Debug, Clone)]
 pub struct Cloud;

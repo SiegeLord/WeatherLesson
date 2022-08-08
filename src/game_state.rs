@@ -28,6 +28,7 @@ pub enum NextScreen
 	Game
 	{
 		seed: u64,
+		restart_music: bool,
 	},
 	Menu,
 	Quit,
@@ -42,6 +43,7 @@ pub struct GameState
 	pub ttf: TtfAddon,
 	pub tick: i64,
 	pub paused: bool,
+	pub hide_mouse: bool,
 
 	pub swirl_amount: f32,
 
@@ -75,10 +77,10 @@ impl GameState
 		let sfx = sfx::Sfx::new(options.sfx_volume, options.music_volume, &core)?;
 
 		let ui_font = ttf
-			.load_ttf_font("data/advanced_pixel_lcd-7.ttf", -20, TtfFlags::zero())
-			.map_err(|_| "Couldn't load 'data/advanced_pixel_lcd-7.ttf'".to_string())?;
+			.load_ttf_font("data/MHTIROGLA.ttf", -32, TtfFlags::zero())
+			.map_err(|_| "Couldn't load 'data/MHTIROGLA.ttf'".to_string())?;
 		let number_font = ttf
-			.load_ttf_font("data/advanced_pixel_lcd-7.ttf", -20, TtfFlags::zero())
+			.load_ttf_font("data/MHTIROGLA.ttf", -32, TtfFlags::zero())
 			.map_err(|_| "Couldn't load 'data/advanced_pixel_lcd-7.ttf'".to_string())?;
 
 		Ok(GameState {
@@ -100,6 +102,7 @@ impl GameState
 			display_width: 0.,
 			display_height: 0.,
 			swirl_amount: 0.,
+			hide_mouse: false,
 		})
 	}
 

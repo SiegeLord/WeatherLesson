@@ -22,14 +22,15 @@ impl Menu
 		state: &mut game_state::GameState, display_width: f32, display_height: f32,
 	) -> Result<Self>
 	{
-		//~ if state.options.play_music
-		//~ {
-		//~ state.sfx.set_music_file("data/evil_minded.mod");
-		//~ state.sfx.play_music()?;
-		//~ }
-		
+		if state.options.play_music
+		{
+			state.sfx.set_music_file("data/smoothsea.xm");
+			state.sfx.play_music()?;
+		}
+
 		state.cache_sprite("data/title.cfg")?;
 		state.paused = false;
+		state.hide_mouse = false;
 		state.sfx.cache_sample("data/ui1.ogg")?;
 		state.sfx.cache_sample("data/ui2.ogg")?;
 
@@ -101,6 +102,7 @@ impl Menu
 				{
 					return Ok(Some(game_state::NextScreen::Game {
 						seed: thread_rng().gen(),
+						restart_music: true,
 					}))
 				}
 				ui::Action::Quit => return Ok(Some(game_state::NextScreen::Quit)),
@@ -122,7 +124,7 @@ impl Menu
 		let sprite = state
 			.get_sprite(sprite)
 			.expect(&format!("Could not find sprite: {}", sprite));
-		
+
 		let h = 64.;
 		if self.do_switch
 		{

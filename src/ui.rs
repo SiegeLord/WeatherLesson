@@ -278,7 +278,7 @@ impl Slider
 		let cursor_x = self.loc.x - w / 2. + w * self.cur_pos / self.max_pos;
 		let start_x = self.loc.x - w / 2.;
 		let end_x = self.loc.x + w / 2.;
-		
+
 		let ww = 48.;
 		if cursor_x - start_x > ww
 		{
@@ -834,6 +834,7 @@ impl ControlsMenu
 			controls::Action::Descend,
 			controls::Action::DropWater,
 			controls::Action::Restart,
+			controls::Action::Minimap,
 		];
 
 		for action in &actions

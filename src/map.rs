@@ -2,6 +2,7 @@ use crate::error::Result;
 use crate::{atlas, components as comps, controls, game_state, sprite, ui, utils};
 
 use allegro::*;
+use allegro_audio::*;
 use allegro_font::*;
 use na::{
 	Isometry3, Matrix4, Perspective3, Point2, Point3, Quaternion, RealField, Rotation2, Rotation3,
@@ -9,11 +10,13 @@ use na::{
 };
 use nalgebra as na;
 use rand::prelude::*;
+use utils::ColorExt;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum UIState
 {
 	Regular,
+	Victory,
 	InMenu,
 }
 
@@ -337,8 +340,10 @@ fn spawn_player(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::En
 				},
 			],
 		},
-		comps::CastsShadow,
-		comps::ExplodeOnCollision,
+		comps::CastsShadow { size: 1 },
+		comps::ExplodeOnCollision {
+			out_of_bounds_ok: true,
+		},
 		comps::OnDeathEffects {
 			effects: vec![
 				comps::OnDeathEffect::SplashWater,
@@ -350,7 +355,7 @@ fn spawn_player(pos: Point3<f32>, dir: f32, world: &mut hecs::World) -> hecs::En
 		comps::WaterCollector {
 			time_to_splash: 0.,
 			time_to_drop: 0.,
-			water_amount: 0,
+			water_amount: 20,
 		},
 	))
 }
@@ -394,7 +399,7 @@ fn spawn_cloud(pos: Point3<f32>, world: &mut hecs::World) -> hecs::Entity
 				variant: 0,
 			},
 		},
-		comps::CastsShadow,
+		comps::CastsShadow { size: 0 },
 		comps::Cloud,
 	))
 }
@@ -409,7 +414,7 @@ fn spawn_mushroom(pos: Point3<f32>, world: &mut hecs::World) -> hecs::Entity
 				variant: 0,
 			},
 		},
-		comps::CastsShadow,
+		comps::CastsShadow { size: 1 },
 		comps::Mushroom { on_fire: false },
 	))
 }
@@ -428,7 +433,7 @@ fn spawn_obelisk(pos: Point3<f32>, dest: Point3<f32>, world: &mut hecs::World) -
 	))
 }
 
-fn change_on_fire(mushroom: hecs::Entity, on_fire: bool, world: &mut hecs::World) -> Result<()>
+fn change_on_fire(mushroom: hecs::Entity, on_fire: bool, world: &mut hecs::World) -> Result<bool>
 {
 	let mut change_component = false;
 	if let Ok(mut mushroom) = world.get::<&mut comps::Mushroom>(mushroom)
@@ -460,7 +465,7 @@ fn change_on_fire(mushroom: hecs::Entity, on_fire: bool, world: &mut hecs::World
 			world.remove_one::<comps::ParticleSpawners>(mushroom)?;
 		}
 	}
-	Ok(())
+	Ok(change_component)
 }
 
 fn spawn_splash(pos: Point3<f32>, creation_time: f64, world: &mut hecs::World) -> hecs::Entity
@@ -501,8 +506,10 @@ fn spawn_water_blob(
 				once: false,
 			},
 		},
-		comps::CastsShadow,
-		comps::ExplodeOnCollision,
+		comps::CastsShadow { size: 2 },
+		comps::ExplodeOnCollision {
+			out_of_bounds_ok: false,
+		},
 		comps::OnDeathEffects {
 			effects: vec![
 				comps::OnDeathEffect::SplashWater,
@@ -605,51 +612,6 @@ fn get_mushroom(mushrooms: &[Option<hecs::Entity>], pos: Point2<f32>) -> Option<
 	}
 }
 
-#[rustfmt::skip]
-fn add_word<R: Rng>(mushroom_map: &mut [(bool, f32)], rng: &mut R)
-{
-	let size = (mushroom_map.len() as f32).sqrt() as i32;
-	
-	let words: Vec<Vec<Vec<i32>>> = vec![
-		vec![
-			vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,],
-			vec![0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0,],
-			vec![0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0,],
-			vec![0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 0,],
-			vec![0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0,],
-			vec![0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0,],
-			vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,],
-		],
-		vec![
-			vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,],
-			vec![0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0,],
-			vec![0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0,],
-			vec![0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0,],
-			vec![0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0,],
-			vec![0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0,],
-			vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,],
-		],
-	];
-	
-	let word = &words[rng.gen_range(0..words.len())];
-	let num_rows = word.len() as i32;
-	let num_cols = word[0].len() as i32;
-	let dx = rng.gen_range(0..size - num_rows);
-	let dy = rng.gen_range(0..size - num_cols);
-	
-	for x in 0..num_rows
-	{
-		for y in 0..num_cols
-		{
-			let idx = ((x + dx) + (y + dy) * size) as usize;
-			if mushroom_map[idx].1 > 0.5
-			{
-				mushroom_map[idx].0 = word[x as usize][(num_cols - y - 1) as usize] == 1;
-			}
-		}
-	}
-}
-
 pub struct Map
 {
 	heightmap: Vec<i32>,
@@ -665,36 +627,53 @@ pub struct Map
 	ui_state: UIState,
 	seed: u64,
 	collision_alert: bool,
+	time_to_play_alert: f64,
+	obelisk_sound: SampleInstance,
+	num_fires: i32,
+	num_blobs: i32,
+	num_extinguished: i32,
 
 	up_state: bool,
 	down_state: bool,
 	left_state: bool,
 	right_state: bool,
 	drop_state: bool,
+	minimap_state: bool,
 }
 
 impl Map
 {
 	pub fn new(
 		state: &mut game_state::GameState, display_width: f32, display_height: f32, seed: u64,
+		restart_music: bool,
 	) -> Result<Self>
 	{
-		let size = 5;
+		state.hide_mouse = true;
+		if state.options.play_music && restart_music
+		{
+			state.sfx.set_music_file("data/andreas_theme.xm");
+			state.sfx.play_music()?;
+		}
+
+		let size = 4;
 		let real_size = 2i32.pow(size as u32) + 1;
+		let mut rng = StdRng::seed_from_u64(seed);
 
 		let mut world = hecs::World::default();
 
-		let player_pos = Point3::new(0., 2., 10.);
-		let player = spawn_player(player_pos, 0., &mut world);
+		let dir = rng.gen_range(0.0..2. * f32::pi());
+		let radius = real_size as f32 / 2.;
+		let player_pos = Point3::new(radius, radius, 0.)
+			+ Vector3::new(radius * dir.cos(), radius * dir.sin(), 12.);
+		let player = spawn_player(player_pos, f32::pi() + dir, &mut world);
 
-		let mut rng = StdRng::seed_from_u64(seed);
-		for _ in 0..16
+		for _ in 0..size * size
 		{
 			spawn_cloud(
 				Point3::new(
 					rng.gen_range(0..real_size) as f32,
 					rng.gen_range(0..real_size) as f32,
-					10.,
+					rng.gen_range(10..15) as f32,
 				),
 				&mut world,
 			);
@@ -710,26 +689,95 @@ impl Map
 		state.cache_sprite("data/fire.cfg")?;
 		state.cache_sprite("data/cloud.cfg")?;
 		state.cache_sprite("data/obelisk.cfg")?;
+		state.cache_sprite("data/shadow.cfg")?;
 		//~ state.atlas.dump_pages();
 
 		state.sfx.cache_sample("data/ui1.ogg")?;
 		state.sfx.cache_sample("data/ui2.ogg")?;
+		state.sfx.cache_sample("data/ui1.ogg")?;
+		state.sfx.cache_sample("data/ui2.ogg")?;
 
-		let heightmap = lower_heightmap(&smooth_heightmap(&diamond_square(size, &mut rng)));
-		let mut mushroom_map = vec![(false, 0.); heightmap.len()];
+		state.sfx.cache_sample("data/explosion.ogg")?;
+		state.sfx.cache_sample("data/fly_down.ogg")?;
+		state.sfx.cache_sample("data/fly_up.ogg")?;
+		state.sfx.cache_sample("data/near_teleport_cont.ogg")?;
+		state.sfx.cache_sample("data/teleport.ogg")?;
+		state.sfx.cache_sample("data/water_drop.ogg")?;
+		state.sfx.cache_sample("data/water_splash.ogg")?;
+		state.sfx.cache_sample("data/extinguish.ogg")?;
 
-		for y in 0..real_size - 1
+		let mut heightmap = lower_heightmap(&smooth_heightmap(&diamond_square(size, &mut rng)));
+
+		loop
 		{
-			for x in 0..real_size - 1
+			let num_water: i32 = heightmap
+				.iter()
+				.map(|&h| {
+					if h == 0
+					{
+						1
+					}
+					else
+					{
+						0
+					}
+				})
+				.sum();
+			if num_water < real_size * real_size / 8
 			{
-				let h = get_height(&heightmap, Point2::new(x as f32, y as f32)).unwrap();
-				mushroom_map[(x + real_size * y) as usize] = (h > 0.5 && rng.gen_bool(0.3), h);
+				for h in &mut heightmap
+				{
+					*h = utils::max(0, *h - 1);
+				}
+			}
+			else
+			{
+				break;
 			}
 		}
 
-		for _ in 0..size * size / 4
+		let mut mushroom_map = vec![(false, 0.); heightmap.len()];
+		let mushroom_heightmap = diamond_square(size, &mut rng);
+		let max_mushroom_height = mushroom_heightmap.iter().max().unwrap();
+
+		let mut num_mushrooms = 0;
+		for y in 1..real_size - 1
 		{
-			add_word(&mut mushroom_map, &mut rng);
+			for x in 1..real_size - 1
+			{
+				let idx = (x + real_size * y) as usize;
+				let h = get_height(&heightmap, Point2::new(x as f32, y as f32)).unwrap();
+				let mh = mushroom_heightmap[idx];
+				mushroom_map[idx] = (h > 0.5 && max_mushroom_height - mh < 2, h);
+				if mushroom_map[idx].0
+				{
+					num_mushrooms += 1;
+				}
+			}
+		}
+
+		let target_num_mushrooms = ((real_size * real_size) as f32 * 0.2) as i32;
+		dbg!(num_mushrooms, target_num_mushrooms);
+		'done: for _ in 0..target_num_mushrooms - num_mushrooms
+		{
+			for _ in 0..50
+			{
+				let x = rng.gen_range(0..real_size);
+				let y = rng.gen_range(0..real_size);
+				if let Some(h) = get_height(&heightmap, Point2::new(x as f32, y as f32))
+				{
+					let idx = (x + real_size * y) as usize;
+					if h > 0.5 && !mushroom_map[idx].0
+					{
+						mushroom_map[idx].0 = true;
+						num_mushrooms += 1;
+						if num_mushrooms >= target_num_mushrooms
+						{
+							break 'done;
+						}
+					}
+				}
+			}
 		}
 
 		let mut mushrooms = vec![None; mushroom_map.len()];
@@ -756,9 +804,9 @@ impl Map
 		}
 
 		let mut obelisk_locs = vec![];
-		for _ in 0..3
+		for _ in 0..size - 3
 		{
-			'placed: loop
+			'placed: for _ in 0..50
 			{
 				let x = rng.gen_range(0..real_size - 1);
 				let y = rng.gen_range(0..real_size - 1);
@@ -769,10 +817,10 @@ impl Map
 					&& mushrooms[(x + y * real_size) as usize].is_none()
 				{
 					obelisk_locs.push((x, y));
-					loop
+					for _ in 0..50
 					{
-						let dx = rng.gen_range(5..real_size - 5);
-						let dy = rng.gen_range(5..real_size - 5);
+						let dx = rng.gen_range(2..real_size - 2);
+						let dy = rng.gen_range(2..real_size - 2);
 						let h2 = get_height(&heightmap, Point2::new(dx as f32, dy as f32)).unwrap();
 
 						if !obelisk_locs.iter().any(|&e| e == (dx, dy))
@@ -805,11 +853,19 @@ impl Map
 			left_state: false,
 			right_state: false,
 			drop_state: false,
+			minimap_state: false,
 			time_to_spread_fire: state.time() + 5.,
 			subscreens: vec![],
 			ui_state: UIState::Regular,
 			seed: seed,
 			collision_alert: false,
+			time_to_play_alert: state.time(),
+			obelisk_sound: state
+				.sfx
+				.play_continuous_sound("data/near_teleport_cont.ogg", 0.)?,
+			num_fires: 0,
+			num_blobs: 0,
+			num_extinguished: 0,
 		})
 	}
 
@@ -817,7 +873,7 @@ impl Map
 		&mut self, state: &mut game_state::GameState,
 	) -> Result<Option<game_state::NextScreen>>
 	{
-		if self.ui_state == UIState::InMenu
+		if self.ui_state != UIState::Regular
 		{
 			return Ok(None);
 		}
@@ -864,6 +920,7 @@ impl Map
 				{
 					water_col.time_to_drop = state.time() + 0.4;
 					water_col.water_amount -= 1;
+					state.sfx.play_sound("data/water_drop.ogg")?;
 					spawn_water = Some((
 						pos.pos + Vector3::new(0., 0., -1.),
 						vel.vel
@@ -875,6 +932,7 @@ impl Map
 		if let Some((pos, vel)) = spawn_water
 		{
 			spawn_water_blob(pos, vel, state.time(), &mut self.world);
+			self.num_blobs += 1;
 		}
 
 		// Camera.
@@ -900,7 +958,7 @@ impl Map
 
 		// Collision.
 		let mushroom_height = 2.;
-		for (id, (pos, _)) in self
+		for (id, (pos, explode)) in self
 			.world
 			.query_mut::<(&comps::Position, &comps::ExplodeOnCollision)>()
 		{
@@ -918,7 +976,7 @@ impl Map
 			}
 			else
 			{
-				do_explode = true;
+				do_explode = !explode.out_of_bounds_ok;
 			}
 			if do_explode
 			{
@@ -946,12 +1004,13 @@ impl Map
 						alert = true;
 					}
 				}
-				else
-				{
-					alert = true;
-				}
 			}
 			self.collision_alert = alert;
+			if self.collision_alert && state.time() > self.time_to_play_alert
+			{
+				state.sfx.play_sound("data/alert.ogg")?;
+				self.time_to_play_alert = state.time() + 3.;
+			}
 		}
 
 		// Cloud.
@@ -1014,10 +1073,14 @@ impl Map
 		{
 			state.swirl_amount = utils::max(state.swirl_amount - 12. * utils::DT, 0.);
 		}
+		self.obelisk_sound
+			.set_gain(state.swirl_amount / 5.)
+			.unwrap();
 		if let Some(dest) = teleport
 		{
 			if let Ok(mut pos) = self.world.get::<&mut comps::Position>(self.player)
 			{
+				state.sfx.play_sound("data/teleport.ogg")?;
 				pos.pos = dest;
 			}
 		}
@@ -1044,7 +1107,21 @@ impl Map
 				{
 					water_col.time_to_splash = state.time() + 0.25;
 					water_col.water_amount += 5;
-					add_splash.push(Point3::new(pos.pos.x, pos.pos.y, 0.01));
+
+					if water_col.water_amount < 100
+					{
+						add_splash.push(Point3::new(pos.pos.x, pos.pos.y, 0.01));
+						if let Some(player_pos) = player_pos
+						{
+							state.sfx.play_positional_sound(
+								"data/water_splash.ogg",
+								world_to_screen(pos.pos),
+								world_to_screen(player_pos),
+								1.,
+							)?;
+						}
+					}
+					water_col.water_amount = utils::min(water_col.water_amount, 99);
 				}
 			}
 		}
@@ -1089,6 +1166,23 @@ impl Map
 			spawn_particle(pos, vel, sprite, state.time(), duration, &mut self.world);
 		}
 
+		// Fire counting.
+		self.num_fires = 0;
+		for (_, mushroom) in self.world.query_mut::<&comps::Mushroom>()
+		{
+			if mushroom.on_fire
+			{
+				self.num_fires += 1;
+			}
+		}
+
+		if self.num_fires == 0
+		{
+			state.paused = true;
+			state.swirl_amount = 0.;
+			self.ui_state = UIState::Victory;
+		}
+
 		// Fire spread
 		let mut ignite = vec![];
 		if state.time() > self.time_to_spread_fire
@@ -1099,13 +1193,12 @@ impl Map
 			{
 				if mushroom.on_fire && rng.gen_bool(0.5)
 				{
-					for [dx, dy] in [[-1., 0.], [1., 0.], [0., 1.], [0., -1.]]
+					let idx = rng.gen_range(0..4);
+					let [dx, dy] = [[-1., 0.], [1., 0.], [0., 1.], [0., -1.]][idx];
+					if let Some(mushroom) =
+						get_mushroom(&self.mushrooms, pos.pos.xy() + Vector2::new(dx, dy))
 					{
-						if let Some(mushroom) =
-							get_mushroom(&self.mushrooms, pos.pos.xy() + Vector2::new(dx, dy))
-						{
-							ignite.push(mushroom);
-						}
+						ignite.push(mushroom);
 					}
 				}
 			}
@@ -1146,7 +1239,7 @@ impl Map
 						{
 							if let Some(mushroom) = get_mushroom(&self.mushrooms, pos.pos.xy())
 							{
-								extinguish.push(mushroom);
+								extinguish.push((pos.pos, mushroom));
 							}
 						}
 					}
@@ -1161,19 +1254,49 @@ impl Map
 			{
 				comps::ExplosionKind::Explosion =>
 				{
+					if let Some(player_pos) = player_pos
+					{
+						state.sfx.play_positional_sound(
+							"data/explosion.ogg",
+							world_to_screen(pos),
+							world_to_screen(player_pos),
+							1.,
+						)?;
+					}
 					spawn_explosion(pos, state.time(), &mut self.world);
 				}
 				comps::ExplosionKind::Splash =>
 				{
+					if let Some(player_pos) = player_pos
+					{
+						state.sfx.play_positional_sound(
+							"data/water_splash.ogg",
+							world_to_screen(pos),
+							world_to_screen(player_pos),
+							1.,
+						)?;
+					}
 					spawn_splash(pos, state.time(), &mut self.world);
 				}
 			}
 		}
 
 		// Extinguish
-		for mushroom in extinguish
+		for (pos, mushroom) in extinguish
 		{
-			change_on_fire(mushroom, false, &mut self.world)?;
+			if change_on_fire(mushroom, false, &mut self.world)?
+			{
+				self.num_extinguished += 1;
+				if let Some(player_pos) = player_pos
+				{
+					state.sfx.play_positional_sound(
+						"data/extinguish.ogg",
+						world_to_screen(pos),
+						world_to_screen(player_pos),
+						1.,
+					)?;
+				}
+			}
 		}
 
 		// Remove dead entities
@@ -1239,6 +1362,7 @@ impl Map
 			{
 				self.ui_state = UIState::Regular;
 				state.paused = false;
+				state.hide_mouse = true;
 			}
 		}
 		else
@@ -1249,10 +1373,18 @@ impl Map
 				{
 					controls::Action::Ascend =>
 					{
+						if down
+						{
+							state.sfx.play_sound("data/fly_up.ogg")?;
+						}
 						self.up_state = down;
 					}
 					controls::Action::Descend =>
 					{
+						if down
+						{
+							state.sfx.play_sound("data/fly_down.ogg")?;
+						}
 						self.down_state = down;
 					}
 					controls::Action::TurnLeft =>
@@ -1271,8 +1403,15 @@ impl Map
 					{
 						if down
 						{
-							return Ok(Some(game_state::NextScreen::Game { seed: self.seed }));
+							return Ok(Some(game_state::NextScreen::Game {
+								seed: self.seed,
+								restart_music: false,
+							}));
 						}
+					}
+					controls::Action::Minimap =>
+					{
+						self.minimap_state = down;
 					}
 				}
 			}
@@ -1291,6 +1430,8 @@ impl Map
 							)));
 						self.ui_state = UIState::InMenu;
 						state.paused = true;
+						state.hide_mouse = false;
+						state.swirl_amount = 0.;
 					}
 					_ => (),
 				},
@@ -1343,10 +1484,9 @@ impl Map
 				);
 			}
 		}
-		state.core.hold_bitmap_drawing(false);
 
 		// Shadows
-		for (_, (pos, _)) in self
+		for (_, (pos, shadow)) in self
 			.world
 			.query::<(&comps::Position, &comps::CastsShadow)>()
 			.iter()
@@ -1356,13 +1496,11 @@ impl Map
 				let xy = world_to_screen(Point3::new(pos.pos.x, pos.pos.y, h));
 				let xy = utils::round_point(xy + Vector2::new(dx, dy));
 
-				state.prim.draw_filled_ellipse(
-					xy.x,
-					xy.y,
-					16.,
-					8.,
-					Color::from_rgba_f(0., 0., 0., 0.4),
-				);
+				let sprite = "data/shadow.cfg";
+				let sprite = state
+					.get_sprite(&sprite)
+					.expect(&format!("Could not find sprite: {}", sprite));
+				sprite.draw(xy, shadow.size, Color::from_rgb_f(1., 1., 1.), state);
 			}
 		}
 
@@ -1439,7 +1577,6 @@ impl Map
 
 			yz1.partial_cmp(&yz2).unwrap()
 		});
-		state.core.hold_bitmap_drawing(true);
 		for (_, xy, sprite, variant) in pos_and_sprite
 		{
 			let sprite = state
@@ -1476,6 +1613,24 @@ impl Map
 			);
 		}
 
+		state.core.draw_text(
+			&state.ui_font,
+			Color::from_rgb_f(0.8, 0.6, 0.4),
+			self.display_width - 256.,
+			24.,
+			FontAlign::Left,
+			"FIRES",
+		);
+
+		state.core.draw_text(
+			&state.number_font,
+			Color::from_rgb_f(0.4, 0.8, 0.8),
+			self.display_width - 64.,
+			24.,
+			FontAlign::Centre,
+			&format!("{:0>2}", self.num_fires),
+		);
+
 		if self.ui_state == UIState::Regular
 		{
 			if self.world.contains(self.player)
@@ -1486,7 +1641,7 @@ impl Map
 						&state.ui_font,
 						Color::from_rgb_f(0.9, 0.3, 0.3),
 						self.display_width / 2.,
-						24.,
+						self.display_height - 48.,
 						FontAlign::Centre,
 						"!! COLLISION IMMINENT !!",
 					);
@@ -1501,15 +1656,23 @@ impl Map
 					self.display_height,
 					Color::from_rgba_f(0., 0., 0., 0.5),
 				);
-				
+
 				state.core.draw_text(
 					&state.ui_font,
 					Color::from_rgb_f(0.7, 0.7, 0.9),
 					self.display_width / 2.,
-					self.display_height / 2.,
+					self.display_height / 2. - 24.,
+					FontAlign::Centre,
+					"CRASHED!",
+				);
+				state.core.draw_text(
+					&state.ui_font,
+					Color::from_rgb_f(0.7, 0.7, 0.9),
+					self.display_width / 2.,
+					self.display_height / 2. + 24.,
 					FontAlign::Centre,
 					&format!(
-						"CRASHED! PRESS {} TO RESTART",
+						"PRESS {} TO RESTART",
 						state
 							.options
 							.controls
@@ -1521,6 +1684,127 @@ impl Map
 					),
 				);
 			}
+
+			if self.minimap_state
+			{
+				let cx = self.display_width / 2.;
+				let cy = self.display_height / 2.;
+				let w = 512.;
+				let ox = cx - w / 2.;
+				let oy = cy - w / 2.;
+
+				state.prim.draw_filled_rectangle(
+					ox,
+					oy,
+					ox + w,
+					oy + w,
+					Color::from_rgba_f(0., 0., 0.3, 0.5),
+				);
+
+				let f = (0.5 + 0.5 * (state.time() * 10.).sin()) as f32;
+
+				let w = w - 32.;
+
+				if let Ok(pos) = self.world.get::<&comps::Position>(self.player)
+				{
+					let color = Color::from_rgba_f(0.1, 0.9, 0.1, 0.5);
+					state.prim.draw_filled_circle(
+						ox + pos.pos.x / self.size as f32 * w,
+						oy + pos.pos.y / self.size as f32 * w,
+						6. * f + 8. * (1. - f),
+						color,
+					);
+				}
+
+				for (_, (pos, mushroom)) in self
+					.world
+					.query_mut::<(&comps::Position, &comps::Mushroom)>()
+				{
+					let color = Color::from_rgba_f(0.9, 0.6, 0.4, 0.5);
+					if mushroom.on_fire
+					{
+						state.prim.draw_filled_circle(
+							ox + pos.pos.x / self.size as f32 * w,
+							oy + pos.pos.y / self.size as f32 * w,
+							4. * f + 5. * (1. - f),
+							color,
+						);
+					}
+				}
+
+				for (_, (pos, _)) in self
+					.world
+					.query_mut::<(&comps::Position, &comps::Obelisk)>()
+				{
+					let color = Color::from_rgba_f(0.9, 0.1, 0.8, 0.5);
+					state.prim.draw_filled_circle(
+						ox + pos.pos.x / self.size as f32 * w,
+						oy + pos.pos.y / self.size as f32 * w,
+						4. * f + 5. * (1. - f),
+						color,
+					);
+				}
+			}
+		}
+		else if self.ui_state == UIState::Victory
+		{
+			state.prim.draw_filled_rectangle(
+				0.,
+				0.,
+				self.display_width,
+				self.display_height,
+				Color::from_rgba_f(0., 0., 0., 0.5),
+			);
+
+			state.core.draw_text(
+				&state.ui_font,
+				Color::from_rgb_f(0.7, 0.7, 0.9),
+				self.display_width / 2.,
+				self.display_height / 2. - 48. * 2.,
+				FontAlign::Centre,
+				&format!("YOU DID IT!",),
+			);
+
+			state.core.draw_text(
+				&state.ui_font,
+				Color::from_rgb_f(0.7, 0.7, 0.9),
+				self.display_width / 2.,
+				self.display_height / 2. - 48. * 1.,
+				FontAlign::Centre,
+				&format!("YOU DUMPED {} TONS OF WATER", self.num_blobs,),
+			);
+
+			state.core.draw_text(
+				&state.ui_font,
+				Color::from_rgb_f(0.7, 0.7, 0.9),
+				self.display_width / 2.,
+				self.display_height / 2. + 48. * 0.,
+				FontAlign::Centre,
+				&format!("YOU EXTINGUISHED {} MUSHROOMS", self.num_extinguished,),
+			);
+
+			let accuracy = self.num_extinguished as f32 / self.num_blobs as f32;
+			state.core.draw_text(
+				&state.ui_font,
+				Color::from_rgb_f(0.7, 0.7, 0.9),
+				self.display_width / 2.,
+				self.display_height / 2. + 48. * 1.,
+				FontAlign::Centre,
+				&format!(
+					"YOUR ACCURACY WAS {:.2}{}",
+					accuracy,
+					if accuracy > 0.9 { " WOW!" } else { "" }
+				),
+			);
+
+			state.core.draw_text(
+				&state.ui_font,
+				Color::from_rgb_f(0.7, 0.7, 0.9),
+				self.display_width / 2.,
+				self.display_height / 2. + 48. * 2.,
+				FontAlign::Centre,
+				"PRESS ESCAPE TO TRY AGAIN",
+			);
 		}
 		else
 		{

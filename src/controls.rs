@@ -311,6 +311,7 @@ pub enum Action
 	Descend,
 	DropWater,
 	Restart,
+	Minimap,
 }
 
 impl Action
@@ -325,6 +326,7 @@ impl Action
 			Action::Descend => "DESCEND",
 			Action::DropWater => "DROP WATER",
 			Action::Restart => "RESTART",
+			Action::Minimap => "MINIMAP",
 		}
 	}
 }
@@ -346,6 +348,7 @@ impl Controls
 		controls.insert(Action::Descend, KeyCode(allegro::KeyCode::S));
 		controls.insert(Action::DropWater, KeyCode(allegro::KeyCode::Space));
 		controls.insert(Action::Restart, KeyCode(allegro::KeyCode::R));
+		controls.insert(Action::Minimap, KeyCode(allegro::KeyCode::Tab));
 		Self { controls: controls }
 	}
 

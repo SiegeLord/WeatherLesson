@@ -123,13 +123,6 @@ pub fn sigmoid(x: f32) -> f32
 	1. / (1. + (-x).exp())
 }
 
-pub fn dir_vec3(dir: f32) -> Vector3<f32>
-{
-	let rot = Rotation2::new(dir);
-	let vec2 = rot * Vector2::new(0., 1.);
-	Vector3::new(vec2.x, 0., vec2.y)
-}
-
 pub fn read_to_string(path: &str) -> Result<String>
 {
 	fs::read_to_string(path)
