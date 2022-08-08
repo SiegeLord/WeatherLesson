@@ -99,10 +99,6 @@ fn diamond_square<R: Rng>(size: i32, rng: &mut R) -> Vec<i32>
 	let global_max_height = 8;
 
 	let mut heightmap = vec![-1i32; (real_size * real_size) as usize];
-	let seed: u64 = rng.gen();
-	//~ let seed = 13207773306860755903;
-	dbg!(seed);
-	let mut rng = StdRng::seed_from_u64(seed);
 
 	//~ for stage in 0..=2
 	for stage in 0..=size
@@ -655,7 +651,7 @@ impl Map
 			state.sfx.play_music()?;
 		}
 
-		let size = 4;
+		let size = state.options.map_size;
 		let real_size = 2i32.pow(size as u32) + 1;
 		let mut rng = StdRng::seed_from_u64(seed);
 
@@ -723,7 +719,7 @@ impl Map
 					}
 				})
 				.sum();
-			if num_water < real_size * real_size / 8
+			if num_water < ((real_size * real_size) as f32 * state.options.water_factor) as i32
 			{
 				for h in &mut heightmap
 				{
@@ -780,6 +776,10 @@ impl Map
 			}
 		}
 
+		let mut num_fires = 0;
+		let target_num_fires = (state.options.fire_start_probability * num_mushrooms as f32) as i32;
+		let mut visited_mushrooms = 0;
+
 		let mut mushrooms = vec![None; mushroom_map.len()];
 		for y in 0..real_size - 1
 		{
@@ -790,10 +790,12 @@ impl Map
 				{
 					let mushroom =
 						spawn_mushroom(Point3::new(x as f32, y as f32, h as f32), &mut world);
-					if rng.gen_bool(0.1)
+					if rng.gen_bool((target_num_fires - num_fires) as f64 / (num_mushrooms - visited_mushrooms) as f64)
 					{
 						change_on_fire(mushroom, true, &mut world)?;
+						num_fires += 1;
 					}
+					visited_mushrooms += 1;
 					Some(mushroom)
 				}
 				else
@@ -804,7 +806,7 @@ impl Map
 		}
 
 		let mut obelisk_locs = vec![];
-		for _ in 0..size - 3
+		for _ in 0..((size - 3) as f32 * state.options.obelisk_factor) as i32
 		{
 			'placed: for _ in 0..50
 			{
@@ -1191,7 +1193,7 @@ impl Map
 				.world
 				.query_mut::<(&comps::Position, &comps::Mushroom)>()
 			{
-				if mushroom.on_fire && rng.gen_bool(0.5)
+				if mushroom.on_fire && rng.gen_bool(state.options.fire_spread_probability as f64)
 				{
 					let idx = rng.gen_range(0..4);
 					let [dx, dy] = [[-1., 0.], [1., 0.], [0., 1.], [0., -1.]][idx];

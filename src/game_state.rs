@@ -20,6 +20,13 @@ pub struct Options
 	pub vsync_method: i32,
 	pub sfx_volume: f32,
 	pub music_volume: f32,
+	pub map_size: i32,
+	pub fire_start_probability: f32,
+	pub fire_spread_probability: f32,
+	pub obelisk_factor: f32,
+	pub water_factor: f32,
+	pub seed: Option<u64>,
+
 	pub controls: controls::Controls,
 }
 

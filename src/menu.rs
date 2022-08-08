@@ -12,6 +12,7 @@ pub struct Menu
 	display_height: f32,
 	switch_time: f64,
 	do_switch: bool,
+	seed: u64,
 
 	subscreens: Vec<ui::SubScreen>,
 }
@@ -33,6 +34,9 @@ impl Menu
 		state.hide_mouse = false;
 		state.sfx.cache_sample("data/ui1.ogg")?;
 		state.sfx.cache_sample("data/ui2.ogg")?;
+		
+		let seed = state.options.seed.unwrap_or_else(|| thread_rng().gen());
+		dbg!(seed);
 
 		Ok(Self {
 			display_width: display_width,
@@ -42,6 +46,7 @@ impl Menu
 				display_height,
 			))],
 			switch_time: 0.,
+			seed: seed,
 			do_switch: false,
 		})
 	}
@@ -76,6 +81,18 @@ impl Menu
 							self.display_height,
 						)));
 				}
+				ui::Action::LevelMenu =>
+				{
+					self.do_switch = true;
+					self.switch_time = state.time();
+					self.subscreens
+						.push(ui::SubScreen::LevelMenu(ui::LevelMenu::new(
+							self.display_width,
+							self.display_height,
+							self.seed,
+							state,
+						)));
+				}
 				ui::Action::ControlsMenu =>
 				{
 					self.do_switch = true;
@@ -101,7 +118,7 @@ impl Menu
 				ui::Action::Start =>
 				{
 					return Ok(Some(game_state::NextScreen::Game {
-						seed: thread_rng().gen(),
+						seed: self.seed,
 						restart_music: true,
 					}))
 				}

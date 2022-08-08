@@ -21,6 +21,11 @@ pub enum Action
 	ChangeInput(controls::Action),
 	MusicVolume(f32),
 	SfxVolume(f32),
+	MapSize(f32),
+	FireSpreadProbability(f32),
+	FireStartProbability(f32),
+	ObeliskFactor(f32),
+	WaterFactor(f32),
 }
 
 #[derive(Clone)]
@@ -230,25 +235,29 @@ struct Slider
 	loc: Point2<f32>,
 	size: Vector2<f32>,
 	cur_pos: f32,
+	min_pos: f32,
 	max_pos: f32,
 	grabbed: bool,
 	selected: bool,
+	round_to_integer: bool,
 	action_fn: fn(f32) -> Action,
 }
 
 impl Slider
 {
 	fn new(
-		x: f32, y: f32, w: f32, h: f32, cur_pos: f32, max_pos: f32, action_fn: fn(f32) -> Action,
+		x: f32, y: f32, w: f32, h: f32, cur_pos: f32, min_pos: f32, max_pos: f32, round_to_integer: bool, action_fn: fn(f32) -> Action,
 	) -> Self
 	{
 		Self {
 			loc: Point2::new(x, y),
 			size: Vector2::new(w, h),
 			cur_pos: cur_pos,
+			min_pos: min_pos,
 			max_pos: max_pos,
 			grabbed: false,
 			selected: false,
+			round_to_integer: round_to_integer,
 			action_fn: action_fn,
 		}
 	}
@@ -275,7 +284,7 @@ impl Slider
 		};
 
 		let w = self.width();
-		let cursor_x = self.loc.x - w / 2. + w * self.cur_pos / self.max_pos;
+		let cursor_x = self.loc.x - w / 2. + w * (self.cur_pos - self.min_pos) / (self.max_pos - self.min_pos);
 		let start_x = self.loc.x - w / 2.;
 		let end_x = self.loc.x + w / 2.;
 
@@ -293,13 +302,23 @@ impl Slider
 				.draw_line(cursor_x + ww, self.loc.y, end_x, self.loc.y, c_ui, 4.);
 		}
 		//state.prim.draw_filled_circle(self.loc.x - w / 2. + w * self.cur_pos / self.max_pos, self.loc.y, 8., c_ui);
+		
+		let text = if self.round_to_integer
+		{
+			format!("{}", (self.cur_pos + 0.5) as i32)
+		}
+		else
+		{
+			format!("{:.1}", self.cur_pos)
+		};
+		
 		state.core.draw_text(
 			&state.ui_font,
 			c_ui,
 			cursor_x,
 			self.loc.y - state.ui_font.get_line_height() as f32 / 2.,
 			FontAlign::Centre,
-			&format!("{:.1}", self.cur_pos),
+			&text,
 		);
 	}
 
@@ -316,7 +335,7 @@ impl Slider
 				{
 					if self.grabbed
 					{
-						self.cur_pos = (x - start.x) / self.width() * self.max_pos;
+						self.cur_pos = self.min_pos + (x - start.x) / self.width() * (self.max_pos - self.min_pos);
 						return Some((self.action_fn)(self.cur_pos));
 					}
 					else
@@ -336,22 +355,30 @@ impl Slider
 				{
 					state.sfx.play_sound("data/ui2.ogg").unwrap();
 					self.grabbed = true;
-					self.cur_pos = (x - start.x) / self.width() * self.max_pos;
+					self.cur_pos = self.min_pos + (x - start.x) / self.width() * (self.max_pos - self.min_pos);
 					return Some((self.action_fn)(self.cur_pos));
 				}
 			}
 			Event::KeyUp { keycode, .. } =>
 			{
+				let increment = if self.round_to_integer
+				{
+					1.
+				}
+				else
+				{
+					 (self.max_pos - self.min_pos) / 25.
+				};
 				if self.selected
 				{
 					match keycode
 					{
 						KeyCode::Left =>
 						{
-							if self.cur_pos > 0.
+							if self.cur_pos > self.min_pos
 							{
 								state.sfx.play_sound("data/ui2.ogg").unwrap();
-								self.cur_pos = utils::max(0., self.cur_pos - self.max_pos / 25.);
+								self.cur_pos = utils::max(self.min_pos, self.cur_pos - increment);
 								return Some((self.action_fn)(self.cur_pos));
 							}
 						}
@@ -361,7 +388,7 @@ impl Slider
 							{
 								state.sfx.play_sound("data/ui2.ogg").unwrap();
 								self.cur_pos =
-									utils::min(self.max_pos, self.cur_pos + self.max_pos / 25.);
+									utils::min(self.max_pos, self.cur_pos + increment);
 								return Some((self.action_fn)(self.cur_pos));
 							}
 						}
@@ -751,7 +778,7 @@ impl MainMenu
 	pub fn new(display_width: f32, display_height: f32) -> Self
 	{
 		let w = 128.;
-		let h = 32.;
+		let h = 20.;
 		let cx = display_width / 2.;
 		let cy = display_height / 2.;
 
@@ -768,7 +795,7 @@ impl MainMenu
 						w,
 						h,
 						"NEW GAME",
-						Action::Start,
+						Action::LevelMenu,
 					))],
 					&[Widget::Button(Button::new(
 						0.,
@@ -821,7 +848,7 @@ impl ControlsMenu
 	pub fn new(display_width: f32, display_height: f32, state: &game_state::GameState) -> Self
 	{
 		let w = 256.;
-		let h = 32.;
+		let h = 20.;
 		let cx = display_width / 2.;
 		let cy = display_height / 2.;
 
@@ -992,7 +1019,7 @@ impl OptionsMenu
 	pub fn new(display_width: f32, display_height: f32, state: &game_state::GameState) -> Self
 	{
 		let w = 256.;
-		let h = 32.;
+		let h = 20.;
 		let cx = display_width / 2.;
 		let cy = display_height / 2.;
 
@@ -1017,7 +1044,9 @@ impl OptionsMenu
 					w,
 					h,
 					state.options.music_volume,
+					0.,
 					4.,
+					false,
 					|i| Action::MusicVolume(i),
 				)),
 			],
@@ -1029,7 +1058,9 @@ impl OptionsMenu
 					w,
 					h,
 					state.options.sfx_volume,
+					0.,
 					4.,
+					false,
 					|i| Action::SfxVolume(i),
 				)),
 			],
@@ -1095,6 +1126,176 @@ impl OptionsMenu
 	}
 }
 
+pub struct LevelMenu
+{
+	widgets: WidgetList,
+}
+
+impl LevelMenu
+{
+	pub fn new(display_width: f32, display_height: f32, seed: u64, state: &game_state::GameState) -> Self
+	{
+		let w = 256.;
+		let h = 20.;
+		let cx = display_width / 2.;
+		let cy = display_height / 2.;
+
+		let widgets = [
+			vec![Widget::Button(Button::new(
+				0.,
+				0.,
+				w,
+				h,
+				"START",
+				Action::Start,
+			))],
+			vec![Widget::Label(Label::new(
+				0.,
+				0.,
+				w,
+				h,
+				&format!("SEED {}", seed),
+			))],
+			vec![
+				Widget::Label(Label::new(0., 0., w, h, "MAP SIZE")),
+				Widget::Slider(Slider::new(
+					0.,
+					0.,
+					w,
+					h,
+					state.options.map_size as f32,
+					4.,
+					6.,
+					true,
+					|i| Action::MapSize(i),
+				)),
+			],
+			vec![
+				Widget::Label(Label::new(0., 0., w, h, "FIRE START")),
+				Widget::Slider(Slider::new(
+					0.,
+					0.,
+					w,
+					h,
+					state.options.fire_start_probability,
+					0.05,
+					1.,
+					false,
+					|i| Action::FireStartProbability(i),
+				)),
+			],
+			vec![
+				Widget::Label(Label::new(0., 0., w, h, "FIRE SPREAD")),
+				Widget::Slider(Slider::new(
+					0.,
+					0.,
+					w,
+					h,
+					state.options.fire_spread_probability,
+					0.,
+					1.,
+					false,
+					|i| Action::FireSpreadProbability(i),
+				)),
+			],
+			vec![
+				Widget::Label(Label::new(0., 0., w, h, "OBELISK FACTOR")),
+				Widget::Slider(Slider::new(
+					0.,
+					0.,
+					w,
+					h,
+					state.options.obelisk_factor,
+					0.,
+					2.,
+					false,
+					|i| Action::ObeliskFactor(i),
+				)),
+			],
+			vec![
+				Widget::Label(Label::new(0., 0., w, h, "WATER FACTOR")),
+				Widget::Slider(Slider::new(
+					0.,
+					0.,
+					w,
+					h,
+					state.options.water_factor,
+					0.1,
+					0.5,
+					false,
+					|i| Action::WaterFactor(i),
+				)),
+			],
+			vec![Widget::Button(Button::new(
+				0.,
+				0.,
+				w,
+				h,
+				"BACK",
+				Action::Back,
+			))],
+		];
+
+		Self {
+			widgets: WidgetList::new(
+				cx,
+				cy,
+				h,
+				h,
+				&widgets.iter().map(|r| &r[..]).collect::<Vec<_>>(),
+			),
+		}
+	}
+
+	pub fn draw(&self, state: &game_state::GameState)
+	{
+		self.widgets.draw(state);
+	}
+
+	pub fn input(&mut self, state: &mut game_state::GameState, event: &Event) -> Option<Action>
+	{
+		let mut options_changed = false;
+		let action = self.widgets.input(state, event);
+		if let Some(action) = action
+		{
+			match action
+			{
+				Action::MapSize(v) =>
+				{
+					state.options.map_size = (v + 0.5) as i32;
+					options_changed = true;
+				}
+				Action::FireSpreadProbability(v) =>
+				{
+					state.options.fire_spread_probability = v;
+					options_changed = true;
+				}
+				Action::FireStartProbability(v) =>
+				{
+					state.options.fire_start_probability = v;
+					options_changed = true;
+				}
+				Action::ObeliskFactor(v) =>
+				{
+					state.options.obelisk_factor = v;
+					options_changed = true;
+				}
+				Action::WaterFactor(v) =>
+				{
+					state.options.water_factor = v;
+					options_changed = true;
+				}
+				_ => return Some(action),
+			}
+		}
+		if options_changed
+		{
+			utils::save_config("options.cfg", &state.options).unwrap();
+		}
+		None
+	}
+}
+
 pub struct InGameMenu
 {
 	widgets: WidgetList,
@@ -1105,7 +1306,7 @@ impl InGameMenu
 	pub fn new(display_width: f32, display_height: f32) -> Self
 	{
 		let w = 128.;
-		let h = 32.;
+		let h = 20.;
 		let cx = display_width / 2.;
 		let cy = display_height / 2.;
 
@@ -1170,6 +1371,7 @@ pub enum SubScreen
 	ControlsMenu(ControlsMenu),
 	OptionsMenu(OptionsMenu),
 	InGameMenu(InGameMenu),
+	LevelMenu(LevelMenu),
 }
 
 impl SubScreen
@@ -1182,6 +1384,7 @@ impl SubScreen
 			SubScreen::ControlsMenu(s) => s.draw(state),
 			SubScreen::OptionsMenu(s) => s.draw(state),
 			SubScreen::InGameMenu(s) => s.draw(state),
+			SubScreen::LevelMenu(s) => s.draw(state),
 		}
 	}
 
@@ -1193,6 +1396,7 @@ impl SubScreen
 			SubScreen::ControlsMenu(s) => s.input(state, event),
 			SubScreen::OptionsMenu(s) => s.input(state, event),
 			SubScreen::InGameMenu(s) => s.input(state, event),
+			SubScreen::LevelMenu(s) => s.input(state, event),
 		}
 	}
 }
