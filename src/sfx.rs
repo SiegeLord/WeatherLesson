@@ -179,7 +179,7 @@ impl Sfx
 			.map_err(|_| format!("Couldn't load {}", self.music_file))?;
 		new_stream.attach(&mut self.sink).unwrap();
 		//~ new_stream.set_playmode(Playmode::Loop).unwrap();
-		new_stream.set_gain(self.music_volume).unwrap();
+		new_stream.set_gain(0.5 * self.music_volume).unwrap();
 		self.stream = Some(new_stream);
 		Ok(())
 	}
@@ -189,7 +189,7 @@ impl Sfx
 		self.music_volume = new_volume;
 		if let Some(stream) = self.stream.as_mut()
 		{
-			stream.set_gain(new_volume).unwrap();
+			stream.set_gain(0.5 * new_volume).unwrap();
 		}
 	}
 

@@ -402,12 +402,13 @@ fn spawn_cloud(pos: Point3<f32>, world: &mut hecs::World) -> hecs::Entity
 
 fn spawn_mushroom(pos: Point3<f32>, world: &mut hecs::World) -> hecs::Entity
 {
+	let mut rng = thread_rng();
 	world.spawn((
 		comps::Position { pos: pos, dir: 0. },
 		comps::Drawable {
 			kind: comps::DrawableKind::Fixed {
 				sprite: "data/mushroom.cfg".to_string(),
-				variant: 0,
+				variant: rng.gen_range(0..32),
 			},
 		},
 		comps::CastsShadow { size: 1 },
@@ -758,8 +759,8 @@ impl Map
 		{
 			for _ in 0..50
 			{
-				let x = rng.gen_range(0..real_size);
-				let y = rng.gen_range(0..real_size);
+				let x = rng.gen_range(1..real_size - 1);
+				let y = rng.gen_range(1..real_size - 1);
 				if let Some(h) = get_height(&heightmap, Point2::new(x as f32, y as f32))
 				{
 					let idx = (x + real_size * y) as usize;
@@ -1590,7 +1591,7 @@ impl Map
 				.expect(&format!("Could not find sprite: {}", sprite));
 			sprite.draw(
 				utils::round_point(xy + Vector2::new(dx, dy)),
-				variant,
+				variant % sprite.num_variants(),
 				Color::from_rgb_f(1., 1., 1.),
 				state,
 			);
@@ -1809,7 +1810,17 @@ impl Map
 				self.display_width / 2.,
 				self.display_height / 2. + 48. * 2.,
 				FontAlign::Centre,
-				"PRESS ESCAPE TO TRY AGAIN",
+				&format!(
+					"PRESS {} TO TRY AGAIN",
+					state
+						.options
+						.controls
+						.controls
+						.get_by_left(&controls::Action::Restart)
+						.unwrap()
+						.to_str()
+						.to_uppercase()
+				),
 			);
 		}
 		else
