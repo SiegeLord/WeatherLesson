@@ -34,8 +34,11 @@ impl Menu
 		state.hide_mouse = false;
 		state.sfx.cache_sample("data/ui1.ogg")?;
 		state.sfx.cache_sample("data/ui2.ogg")?;
-		
-		let seed = state.options.seed.unwrap_or_else(|| thread_rng().gen());
+
+		let seed = state
+			.options
+			.seed
+			.unwrap_or_else(|| thread_rng().gen::<u16>() as u64);
 		dbg!(seed);
 
 		Ok(Self {

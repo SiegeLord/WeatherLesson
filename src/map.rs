@@ -790,7 +790,10 @@ impl Map
 				{
 					let mushroom =
 						spawn_mushroom(Point3::new(x as f32, y as f32, h as f32), &mut world);
-					if rng.gen_bool((target_num_fires - num_fires) as f64 / (num_mushrooms - visited_mushrooms) as f64)
+					if rng.gen_bool(
+						(target_num_fires - num_fires) as f64
+							/ (num_mushrooms - visited_mushrooms) as f64,
+					)
 					{
 						change_on_fire(mushroom, true, &mut world)?;
 						num_fires += 1;
@@ -1429,6 +1432,7 @@ impl Map
 							.push(ui::SubScreen::InGameMenu(ui::InGameMenu::new(
 								self.display_width,
 								self.display_height,
+								self.seed,
 							)));
 						self.ui_state = UIState::InMenu;
 						state.paused = true;

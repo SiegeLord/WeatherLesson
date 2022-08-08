@@ -246,7 +246,8 @@ struct Slider
 impl Slider
 {
 	fn new(
-		x: f32, y: f32, w: f32, h: f32, cur_pos: f32, min_pos: f32, max_pos: f32, round_to_integer: bool, action_fn: fn(f32) -> Action,
+		x: f32, y: f32, w: f32, h: f32, cur_pos: f32, min_pos: f32, max_pos: f32,
+		round_to_integer: bool, action_fn: fn(f32) -> Action,
 	) -> Self
 	{
 		Self {
@@ -284,7 +285,8 @@ impl Slider
 		};
 
 		let w = self.width();
-		let cursor_x = self.loc.x - w / 2. + w * (self.cur_pos - self.min_pos) / (self.max_pos - self.min_pos);
+		let cursor_x =
+			self.loc.x - w / 2. + w * (self.cur_pos - self.min_pos) / (self.max_pos - self.min_pos);
 		let start_x = self.loc.x - w / 2.;
 		let end_x = self.loc.x + w / 2.;
 
@@ -302,7 +304,7 @@ impl Slider
 				.draw_line(cursor_x + ww, self.loc.y, end_x, self.loc.y, c_ui, 4.);
 		}
 		//state.prim.draw_filled_circle(self.loc.x - w / 2. + w * self.cur_pos / self.max_pos, self.loc.y, 8., c_ui);
-		
+
 		let text = if self.round_to_integer
 		{
 			format!("{}", (self.cur_pos + 0.5) as i32)
@@ -311,7 +313,7 @@ impl Slider
 		{
 			format!("{:.1}", self.cur_pos)
 		};
-		
+
 		state.core.draw_text(
 			&state.ui_font,
 			c_ui,
@@ -335,7 +337,8 @@ impl Slider
 				{
 					if self.grabbed
 					{
-						self.cur_pos = self.min_pos + (x - start.x) / self.width() * (self.max_pos - self.min_pos);
+						self.cur_pos = self.min_pos
+							+ (x - start.x) / self.width() * (self.max_pos - self.min_pos);
 						return Some((self.action_fn)(self.cur_pos));
 					}
 					else
@@ -355,7 +358,8 @@ impl Slider
 				{
 					state.sfx.play_sound("data/ui2.ogg").unwrap();
 					self.grabbed = true;
-					self.cur_pos = self.min_pos + (x - start.x) / self.width() * (self.max_pos - self.min_pos);
+					self.cur_pos =
+						self.min_pos + (x - start.x) / self.width() * (self.max_pos - self.min_pos);
 					return Some((self.action_fn)(self.cur_pos));
 				}
 			}
@@ -367,7 +371,7 @@ impl Slider
 				}
 				else
 				{
-					 (self.max_pos - self.min_pos) / 25.
+					(self.max_pos - self.min_pos) / 25.
 				};
 				if self.selected
 				{
@@ -387,8 +391,7 @@ impl Slider
 							if self.cur_pos < self.max_pos
 							{
 								state.sfx.play_sound("data/ui2.ogg").unwrap();
-								self.cur_pos =
-									utils::min(self.max_pos, self.cur_pos + increment);
+								self.cur_pos = utils::min(self.max_pos, self.cur_pos + increment);
 								return Some((self.action_fn)(self.cur_pos));
 							}
 						}
@@ -1133,7 +1136,9 @@ pub struct LevelMenu
 
 impl LevelMenu
 {
-	pub fn new(display_width: f32, display_height: f32, seed: u64, state: &game_state::GameState) -> Self
+	pub fn new(
+		display_width: f32, display_height: f32, seed: u64, state: &game_state::GameState,
+	) -> Self
 	{
 		let w = 256.;
 		let h = 20.;
@@ -1303,7 +1308,7 @@ pub struct InGameMenu
 
 impl InGameMenu
 {
-	pub fn new(display_width: f32, display_height: f32) -> Self
+	pub fn new(display_width: f32, display_height: f32, seed: u64) -> Self
 	{
 		let w = 128.;
 		let h = 20.;
@@ -1317,6 +1322,13 @@ impl InGameMenu
 				h,
 				h,
 				&[
+					&[Widget::Label(Label::new(
+						0.,
+						0.,
+						w,
+						h,
+						&format!("SEED {}", seed),
+					))],
 					&[Widget::Button(Button::new(
 						0.,
 						0.,
