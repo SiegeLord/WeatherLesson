@@ -313,7 +313,7 @@ fn real_main() -> Result<()>
 	Ok(())
 }
 
-fn main()
+allegro_main!
 {
 	use std::panic::catch_unwind;
 
