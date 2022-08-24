@@ -1006,7 +1006,7 @@ impl ControlsMenu
 		}
 		if options_changed
 		{
-			utils::save_config("options.cfg", &state.options).unwrap();
+			game_state::save_options(&state.core, &state.options).unwrap();
 		}
 		action
 	}
@@ -1123,7 +1123,7 @@ impl OptionsMenu
 		}
 		if options_changed
 		{
-			utils::save_config("options.cfg", &state.options).unwrap();
+			game_state::save_options(&state.core, &state.options).unwrap();
 		}
 		None
 	}
@@ -1295,7 +1295,7 @@ impl LevelMenu
 		}
 		if options_changed
 		{
-			utils::save_config("options.cfg", &state.options).unwrap();
+			game_state::save_options(&state.core, &state.options).unwrap();
 		}
 		None
 	}

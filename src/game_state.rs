@@ -8,9 +8,10 @@ use allegro_ttf::*;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::fmt;
+use std::{fmt, path};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(default)]
 pub struct Options
 {
 	pub fullscreen: bool,
@@ -28,6 +29,29 @@ pub struct Options
 	pub seed: Option<u64>,
 
 	pub controls: controls::Controls,
+}
+
+impl Default for Options
+{
+	fn default() -> Self
+	{
+		Self {
+			fullscreen: true,
+			width: 1024,
+			height: 728,
+			play_music: true,
+			vsync_method: 2,
+			sfx_volume: 1.,
+			music_volume: 0.5,
+			map_size: 4,
+			fire_start_probability: 0.1,
+			fire_spread_probability: 0.5,
+			obelisk_factor: 1.,
+			water_factor: 0.2,
+			seed: None,
+			controls: controls::Controls::new(),
+		}
+	}
 }
 
 pub enum NextScreen
@@ -66,12 +90,44 @@ pub struct GameState
 	sprites: HashMap<String, sprite::Sprite>,
 }
 
+pub fn load_options(core: &Core) -> Result<Options>
+{
+	let mut path_buf = path::PathBuf::new();
+	if cfg!(feature = "use_user_settings")
+	{
+		path_buf.push(
+			core.get_standard_path(StandardPath::UserSettings)
+				.map_err(|_| "Couldn't get standard path".to_string())?,
+		);
+	}
+	path_buf.push("options.cfg");
+	Ok(utils::load_config(path_buf.to_str().unwrap()).unwrap_or_default())
+}
+
+pub fn save_options(core: &Core, options: &Options) -> Result<()>
+{
+	let mut path_buf = path::PathBuf::new();
+	if cfg!(feature = "use_user_settings")
+	{
+		path_buf.push(
+			core.get_standard_path(StandardPath::UserSettings)
+				.map_err(|_| "Couldn't get standard path".to_string())?,
+		);
+	}
+	std::fs::create_dir_all(&path_buf).map_err(|_| "Couldn't create directory".to_string())?;
+	path_buf.push("options.cfg");
+	utils::save_config(path_buf.to_str().unwrap(), &options)
+}
+
 impl GameState
 {
 	pub fn new() -> Result<GameState>
 	{
-		let options: Options = utils::load_config("options.cfg")?;
 		let core = Core::init()?;
+		core.set_app_name("WeatherLesson");
+		core.set_org_name("SiegeLord");
+
+		let options = load_options(&core)?;
 		let prim = PrimitivesAddon::init(&core)?;
 		let image = ImageAddon::init(&core)?;
 		let font = FontAddon::init(&core)?;

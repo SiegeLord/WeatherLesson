@@ -344,8 +344,8 @@ impl Controls
 		let mut controls = bimap::BiBTreeMap::new();
 		controls.insert(Action::TurnLeft, KeyCode(allegro::KeyCode::Left));
 		controls.insert(Action::TurnRight, KeyCode(allegro::KeyCode::Right));
-		controls.insert(Action::Ascend, KeyCode(allegro::KeyCode::W));
-		controls.insert(Action::Descend, KeyCode(allegro::KeyCode::S));
+		controls.insert(Action::Ascend, KeyCode(allegro::KeyCode::Down));
+		controls.insert(Action::Descend, KeyCode(allegro::KeyCode::Up));
 		controls.insert(Action::DropWater, KeyCode(allegro::KeyCode::Space));
 		controls.insert(Action::Restart, KeyCode(allegro::KeyCode::R));
 		controls.insert(Action::Minimap, KeyCode(allegro::KeyCode::Tab));
