@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 #![allow(unused_imports)]
 #![allow(dead_code)]
-#![feature(backtrace)]
 
 mod atlas;
 //~ mod character_sprite_sheet;
@@ -251,6 +250,14 @@ fn real_main() -> Result<()>
 					}
 				}
 
+				if state.hide_mouse
+				{
+					state
+						.core
+						.set_mouse_xy(&display, display.get_width() / 2, display.get_height() / 2)
+						.map_err(|_| "Couldn't set mouse position".to_string())?;
+				}
+
 				if old_mouse_hide != state.hide_mouse
 				{
 					old_mouse_hide = state.hide_mouse;
@@ -313,8 +320,7 @@ fn real_main() -> Result<()>
 	Ok(())
 }
 
-allegro_main!
-{
+allegro_main! {
 	use std::panic::catch_unwind;
 
 	match catch_unwind(|| real_main().unwrap())

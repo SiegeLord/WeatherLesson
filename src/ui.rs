@@ -18,7 +18,7 @@ pub enum Action
 	Quit,
 	Back,
 	ToggleFullscreen,
-	ChangeInput(controls::Action),
+	ChangeInput(controls::Action, usize),
 	MusicVolume(f32),
 	SfxVolume(f32),
 	MapSize(f32),
@@ -26,6 +26,7 @@ pub enum Action
 	FireStartProbability(f32),
 	ObeliskFactor(f32),
 	WaterFactor(f32),
+	MouseSensitivity(f32),
 }
 
 #[derive(Clone)]
@@ -856,31 +857,46 @@ impl ControlsMenu
 		let cy = display_height / 2.;
 
 		let mut widgets = vec![];
+		widgets.push(vec![
+			Widget::Label(Label::new(0., 0., w * 1.5, h, "MOUSE SENSITIVITY")),
+			Widget::Slider(Slider::new(
+				0.,
+				0.,
+				w,
+				h,
+				state.controls.get_mouse_sensitivity(),
+				0.,
+				2.,
+				false,
+				|i| Action::MouseSensitivity(i),
+			)),
+		]);
 
-		let actions = [
-			controls::Action::TurnLeft,
-			controls::Action::TurnRight,
-			controls::Action::Ascend,
-			controls::Action::Descend,
-			controls::Action::DropWater,
-			controls::Action::Restart,
-			controls::Action::Minimap,
-		];
-
-		for action in &actions
+		for (&action, &inputs) in state.controls.get_actions_to_inputs()
 		{
-			let keycode = state.options.controls.controls.get_by_left(action).unwrap();
-			widgets.push(vec![
-				Widget::Label(Label::new(0., 0., w, h, &action.to_str().to_uppercase())),
-				Widget::Button(Button::new(
+			let mut row = vec![Widget::Label(Label::new(
+				0.,
+				0.,
+				w,
+				h,
+				&action.to_str().to_uppercase(),
+			))];
+			for i in 0..2
+			{
+				let input = inputs[i];
+				let input_str = input
+					.map(|i| i.to_str().to_uppercase())
+					.unwrap_or("NONE".into());
+				row.push(Widget::Button(Button::new(
 					0.,
 					0.,
 					w,
 					h,
-					&keycode.to_str().to_uppercase(),
-					Action::ChangeInput(*action),
-				)),
-			])
+					&input_str,
+					Action::ChangeInput(action, i),
+				)));
+			}
+			widgets.push(row);
 		}
 		widgets.push(vec![Widget::Button(Button::new(
 			0.,
@@ -895,7 +911,7 @@ impl ControlsMenu
 			widgets: WidgetList::new(
 				cx,
 				cy,
-				2. * h,
+				h,
 				h,
 				&widgets.iter().map(|r| &r[..]).collect::<Vec<_>>(),
 			),
@@ -914,72 +930,18 @@ impl ControlsMenu
 		let mut options_changed = false;
 		if self.accepting_input
 		{
-			match event
+			match &mut self.widgets.widgets[self.widgets.cur_selection.0]
+				[self.widgets.cur_selection.1]
 			{
-				Event::KeyUp { keycode, .. } =>
+				Widget::Button(b) =>
 				{
-					self.accepting_input = false;
-					state.sfx.play_sound("data/ui2.ogg").unwrap();
-					if *keycode != KeyCode::Escape
+					if let Action::ChangeInput(action, index) = b.action
 					{
-						match &mut self.widgets.widgets[self.widgets.cur_selection.0]
-							[self.widgets.cur_selection.1]
+						if let Some(changed) = state.controls.change_action(action, index, event)
 						{
-							Widget::Button(b) =>
-							{
-								let new_keycode = controls::KeyCode(*keycode);
-								if let Action::ChangeInput(action) = b.action
-								{
-									if state.options.controls.controls.contains_right(&new_keycode)
-									{
-										let old_keycode = *state
-											.options
-											.controls
-											.controls
-											.get_by_left(&action)
-											.unwrap();
-										let other_action = *state
-											.options
-											.controls
-											.controls
-											.get_by_right(&new_keycode)
-											.unwrap();
-										state
-											.options
-											.controls
-											.controls
-											.insert(other_action, old_keycode);
-									}
-									state.options.controls.controls.insert(action, new_keycode);
-									options_changed = true;
-								}
-							}
-							_ => (),
-						}
-					}
-					for row in &mut self.widgets.widgets
-					{
-						for w in row
-						{
-							match w
-							{
-								Widget::Button(b) => match b.action
-								{
-									Action::ChangeInput(action) =>
-									{
-										b.text = state
-											.options
-											.controls
-											.controls
-											.get_by_left(&action)
-											.unwrap()
-											.to_str()
-											.to_uppercase();
-									}
-									_ => (),
-								},
-								_ => (),
-							}
+							options_changed = changed;
+							state.sfx.play_sound("data/ui2.ogg").unwrap();
+							self.accepting_input = false;
 						}
 					}
 				}
@@ -988,25 +950,70 @@ impl ControlsMenu
 		}
 		else
 		{
+			if let allegro::Event::KeyDown {
+				keycode: allegro::KeyCode::Delete,
+				..
+			} = event
+			{
+				match &mut self.widgets.widgets[self.widgets.cur_selection.0]
+					[self.widgets.cur_selection.1]
+				{
+					Widget::Button(b) =>
+					{
+						if let Action::ChangeInput(action, index) = b.action
+						{
+							state.controls.clear_action(action, index);
+							options_changed = true;
+							state.sfx.play_sound("data/ui2.ogg").unwrap();
+						}
+					}
+					_ => (),
+				}
+			}
 			action = self.widgets.input(state, event);
 			match action
 			{
-				Some(Action::ChangeInput(_)) =>
+				Some(Action::ChangeInput(_, _)) =>
 				{
 					self.accepting_input = true;
 					match &mut self.widgets.widgets[self.widgets.cur_selection.0]
 						[self.widgets.cur_selection.1]
 					{
-						Widget::Button(b) => b.text = "PRESS KEY".into(),
+						Widget::Button(b) => b.text = "PRESS INPUT".into(),
 						_ => (),
 					}
+				}
+				Some(Action::MouseSensitivity(ms)) =>
+				{
+					state.controls.set_mouse_sensitivity(ms);
+					options_changed = true;
 				}
 				_ => (),
 			}
 		}
 		if options_changed
 		{
-			game_state::save_options(&state.core, &state.options).unwrap();
+			for widget_row in &mut self.widgets.widgets
+			{
+				for widget in widget_row
+				{
+					match widget
+					{
+						Widget::Button(b) =>
+						{
+							if let Action::ChangeInput(action, index) = b.action
+							{
+								b.text = state.controls.get_inputs(action).unwrap()[index]
+									.map(|a| a.to_str().to_uppercase())
+									.unwrap_or("NONE".into());
+							}
+						}
+						_ => (),
+					}
+				}
+			}
+			state.options.controls = state.controls.get_controls().clone();
+			utils::save_config("options.cfg", &state.options).unwrap();
 		}
 		action
 	}

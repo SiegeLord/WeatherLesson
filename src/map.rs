@@ -629,13 +629,9 @@ pub struct Map
 	num_fires: i32,
 	num_blobs: i32,
 	num_extinguished: i32,
-
-	up_state: bool,
-	down_state: bool,
-	left_state: bool,
-	right_state: bool,
-	drop_state: bool,
-	minimap_state: bool,
+	show_minimap: bool,
+	old_up: f32,
+	old_down: f32,
 }
 
 impl Map
@@ -854,12 +850,6 @@ impl Map
 			camera_pos: player_pos,
 			world: world,
 			player: player,
-			up_state: false,
-			down_state: false,
-			left_state: false,
-			right_state: false,
-			drop_state: false,
-			minimap_state: false,
 			time_to_spread_fire: state.time() + 5.,
 			subscreens: vec![],
 			ui_state: UIState::Regular,
@@ -872,6 +862,9 @@ impl Map
 			num_fires: 0,
 			num_blobs: 0,
 			num_extinguished: 0,
+			show_minimap: false,
+			old_up: 0.,
+			old_down: 0.,
 		})
 	}
 
@@ -879,13 +872,22 @@ impl Map
 		&mut self, state: &mut game_state::GameState,
 	) -> Result<Option<game_state::NextScreen>>
 	{
+		if state.controls.get_action_state(controls::Action::Restart) > 0.5
+		{
+			return Ok(Some(game_state::NextScreen::Game {
+				seed: self.seed,
+				restart_music: false,
+			}));
+		}
 		if self.ui_state != UIState::Regular
 		{
 			return Ok(None);
 		}
+
 		let mut to_die = vec![];
 
 		// Player input.
+		self.show_minimap = state.controls.get_action_state(controls::Action::Minimap) > 0.5;
 		let mut spawn_water = None;
 		let mut rng = thread_rng();
 		let mut player_pos = None;
@@ -896,14 +898,33 @@ impl Map
 			&mut comps::WaterCollector,
 		)>(self.player)
 		{
+			let get_action_state =
+				|state: &mut game_state::GameState, action| state.controls.get_action_state(action);
 			player_pos = Some(pos.pos);
 			player_vel = Some(vel.vel);
-			let left_right = self.left_state as i32 - (self.right_state as i32);
-			let up_down = self.up_state as i32 - (self.down_state as i32);
+			let left_right = get_action_state(state, controls::Action::TurnLeft)
+				- get_action_state(state, controls::Action::TurnRight);
+			let up = get_action_state(state, controls::Action::Ascend);
+			let down = get_action_state(state, controls::Action::Descend);
+			let up_down = up - down;
+			if up > self.old_up
+			{
+				state.sfx.play_sound("data/fly_up.ogg")?;
+			}
+			if down > self.old_down
+			{
+				state.sfx.play_sound("data/fly_down.ogg")?;
+			}
+			self.old_up = up;
+			self.old_down = down;
 
-			vel.dir_vel = -left_right as f32 * 1.;
+			vel.dir_vel = -left_right * 1.;
+			if vel.dir_vel.abs() > 1.
+			{
+				vel.dir_vel /= vel.dir_vel.abs();
+			}
 			let max_vert_speed = 3.;
-			let desired_vel = up_down as f32 * max_vert_speed;
+			let desired_vel = up_down * max_vert_speed;
 			let f = utils::clamp(water_col.water_amount as f32 / 50., 0., 1.);
 			let accel = f * 1. + (1. - f) * 5.;
 			if vel.vel.z > desired_vel
@@ -920,7 +941,7 @@ impl Map
 				vel.vel.z = max_vert_speed.copysign(vel.vel.z);
 			}
 
-			if self.drop_state
+			if get_action_state(state, controls::Action::DropWater) > 0.5
 			{
 				if state.time() > water_col.time_to_drop && water_col.water_amount > 0
 				{
@@ -1373,55 +1394,7 @@ impl Map
 		}
 		else
 		{
-			if let Some((down, action)) = state.options.controls.decode_event(event)
-			{
-				match action
-				{
-					controls::Action::Ascend =>
-					{
-						if down
-						{
-							state.sfx.play_sound("data/fly_up.ogg")?;
-						}
-						self.up_state = down;
-					}
-					controls::Action::Descend =>
-					{
-						if down
-						{
-							state.sfx.play_sound("data/fly_down.ogg")?;
-						}
-						self.down_state = down;
-					}
-					controls::Action::TurnLeft =>
-					{
-						self.left_state = down;
-					}
-					controls::Action::TurnRight =>
-					{
-						self.right_state = down;
-					}
-					controls::Action::DropWater =>
-					{
-						self.drop_state = down;
-					}
-					controls::Action::Restart =>
-					{
-						if down
-						{
-							return Ok(Some(game_state::NextScreen::Game {
-								seed: self.seed,
-								restart_music: false,
-							}));
-						}
-					}
-					controls::Action::Minimap =>
-					{
-						self.minimap_state = down;
-					}
-				}
-			}
-
+			state.controls.decode_event(event);
 			match event
 			{
 				Event::KeyDown { keycode, .. } => match keycode
@@ -1683,16 +1656,13 @@ impl Map
 						state
 							.options
 							.controls
-							.controls
-							.get_by_left(&controls::Action::Restart)
-							.unwrap()
-							.to_str()
+							.get_action_string(controls::Action::Restart)
 							.to_uppercase()
 					),
 				);
 			}
 
-			if self.minimap_state
+			if self.show_minimap
 			{
 				let cx = self.display_width / 2.;
 				let cy = self.display_height / 2.;
@@ -1815,10 +1785,7 @@ impl Map
 					state
 						.options
 						.controls
-						.controls
-						.get_by_left(&controls::Action::Restart)
-						.unwrap()
-						.to_str()
+						.get_action_string(controls::Action::Restart)
 						.to_uppercase()
 				),
 			);

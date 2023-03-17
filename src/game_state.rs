@@ -11,7 +11,6 @@ use std::collections::HashMap;
 use std::{fmt, path};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(default)]
 pub struct Options
 {
 	pub fullscreen: bool,
@@ -88,6 +87,7 @@ pub struct GameState
 	pub display_height: f32,
 	bitmaps: HashMap<String, Bitmap>,
 	sprites: HashMap<String, sprite::Sprite>,
+	pub controls: controls::ControlsHandler,
 }
 
 pub fn load_options(core: &Core) -> Result<Options>
@@ -146,6 +146,7 @@ impl GameState
 			.load_ttf_font("data/MHTIROGLA.ttf", -32, TtfFlags::zero())
 			.map_err(|_| "Couldn't load 'data/advanced_pixel_lcd-7.ttf'".to_string())?;
 
+		let controls = controls::ControlsHandler::new(options.controls.clone());
 		Ok(GameState {
 			options: options,
 			core: core,
@@ -166,6 +167,7 @@ impl GameState
 			display_height: 0.,
 			swirl_amount: 0.,
 			hide_mouse: false,
+			controls: controls,
 		})
 	}
 
