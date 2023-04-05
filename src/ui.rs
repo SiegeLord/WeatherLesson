@@ -11,12 +11,11 @@ pub enum Action
 {
 	SelectMe,
 	MainMenu,
-	ControlsMenu,
 	LevelMenu,
 	Start,
-	OptionsMenu,
 	Quit,
 	Back,
+	Forward(fn(&mut game_state::GameState, f32, f32) -> SubScreen),
 	ToggleFullscreen,
 	ChangeInput(controls::Action, usize),
 	MusicVolume(f32),
@@ -807,7 +806,9 @@ impl MainMenu
 						w,
 						h,
 						"CONTROLS",
-						Action::ControlsMenu,
+						Action::Forward(|s, dx, dy| {
+							SubScreen::ControlsMenu(ControlsMenu::new(s, dx, dy))
+						}),
 					))],
 					&[Widget::Button(Button::new(
 						0.,
@@ -815,7 +816,9 @@ impl MainMenu
 						w,
 						h,
 						"OPTIONS",
-						Action::OptionsMenu,
+						Action::Forward(|s, dx, dy| {
+							SubScreen::OptionsMenu(OptionsMenu::new(s, dx, dy))
+						}),
 					))],
 					&[Widget::Button(Button::new(
 						0.,
@@ -849,7 +852,7 @@ pub struct ControlsMenu
 
 impl ControlsMenu
 {
-	pub fn new(display_width: f32, display_height: f32, state: &game_state::GameState) -> Self
+	pub fn new(state: &game_state::GameState, display_width: f32, display_height: f32) -> Self
 	{
 		let w = 256.;
 		let h = 20.;
@@ -1026,7 +1029,7 @@ pub struct OptionsMenu
 
 impl OptionsMenu
 {
-	pub fn new(display_width: f32, display_height: f32, state: &game_state::GameState) -> Self
+	pub fn new(state: &game_state::GameState, display_width: f32, display_height: f32) -> Self
 	{
 		let w = 256.;
 		let h = 20.;
@@ -1350,7 +1353,9 @@ impl InGameMenu
 						w,
 						h,
 						"CONTROLS",
-						Action::ControlsMenu,
+						Action::Forward(|s, dx, dy| {
+							SubScreen::ControlsMenu(ControlsMenu::new(s, dx, dy))
+						}),
 					))],
 					&[Widget::Button(Button::new(
 						0.,
@@ -1358,7 +1363,9 @@ impl InGameMenu
 						w,
 						h,
 						"OPTIONS",
-						Action::OptionsMenu,
+						Action::Forward(|s, dx, dy| {
+							SubScreen::OptionsMenu(OptionsMenu::new(s, dx, dy))
+						}),
 					))],
 					&[Widget::Button(Button::new(
 						0.,

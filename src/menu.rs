@@ -75,15 +75,6 @@ impl Menu
 		{
 			match action
 			{
-				ui::Action::MainMenu =>
-				{
-					self.do_switch = false;
-					self.subscreens
-						.push(ui::SubScreen::MainMenu(ui::MainMenu::new(
-							self.display_width,
-							self.display_height,
-						)));
-				}
 				ui::Action::LevelMenu =>
 				{
 					self.do_switch = true;
@@ -96,27 +87,13 @@ impl Menu
 							state,
 						)));
 				}
-				ui::Action::ControlsMenu =>
+				ui::Action::Forward(subscreen_fn) =>
 				{
-					self.do_switch = true;
-					self.switch_time = state.time();
-					self.subscreens
-						.push(ui::SubScreen::ControlsMenu(ui::ControlsMenu::new(
-							self.display_width,
-							self.display_height,
-							state,
-						)));
-				}
-				ui::Action::OptionsMenu =>
-				{
-					self.do_switch = true;
-					self.switch_time = state.time();
-					self.subscreens
-						.push(ui::SubScreen::OptionsMenu(ui::OptionsMenu::new(
-							self.display_width,
-							self.display_height,
-							state,
-						)));
+					self.subscreens.push(subscreen_fn(
+						state,
+						self.display_width,
+						self.display_height,
+					));
 				}
 				ui::Action::Start =>
 				{
