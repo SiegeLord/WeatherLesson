@@ -176,9 +176,9 @@ impl Input
 			Input::MouseButton(b) => match b
 			{
 				0 => "Mouse0",
-				1 => "Mouse1",
-				2 => "Mouse2",
-				3 => "Mouse3",
+				1 => "Mouse Left",
+				2 => "Mouse Right",
+				3 => "Mouse Middle",
 				4 => "Mouse4",
 				5 => "Mouse5",
 				6 => "Mouse6",
@@ -337,9 +337,9 @@ impl Input
 			input = match s
 			{
 				"Mouse0" => Some(0),
-				"Mouse1" => Some(1),
-				"Mouse2" => Some(2),
-				"Mouse3" => Some(3),
+				"Mouse Left" => Some(1),
+				"Mouse Right" => Some(2),
+				"Mouse Middle" => Some(3),
 				"Mouse4" => Some(4),
 				"Mouse5" => Some(5),
 				"Mouse6" => Some(6),
@@ -519,7 +519,7 @@ impl Controls
 				inputs.push(input.to_str());
 			}
 		}
-		inputs.join(" ")
+		inputs.join("/")
 	}
 }
 

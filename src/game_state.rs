@@ -101,7 +101,14 @@ pub fn load_options(core: &Core) -> Result<Options>
 		);
 	}
 	path_buf.push("options.cfg");
-	Ok(utils::load_config(path_buf.to_str().unwrap()).unwrap_or_default())
+	if path_buf.exists()
+	{
+		utils::load_config(path_buf.to_str().unwrap())
+	}
+	else
+	{
+		Ok(Default::default())
+	}
 }
 
 pub fn save_options(core: &Core, options: &Options) -> Result<()>

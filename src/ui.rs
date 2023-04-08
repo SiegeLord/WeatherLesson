@@ -1016,7 +1016,7 @@ impl ControlsMenu
 				}
 			}
 			state.options.controls = state.controls.get_controls().clone();
-			utils::save_config("options.cfg", &state.options).unwrap();
+			game_state::save_options(&state.core, &state.options).unwrap();
 		}
 		action
 	}
