@@ -874,6 +874,7 @@ impl Map
 	{
 		if state.controls.get_action_state(controls::Action::Restart) > 0.5
 		{
+			state.paused = false;
 			return Ok(Some(game_state::NextScreen::Game {
 				seed: self.seed,
 				restart_music: false,
@@ -1342,16 +1343,9 @@ impl Map
 		&mut self, event: &Event, state: &mut game_state::GameState,
 	) -> Result<Option<game_state::NextScreen>>
 	{
+		state.controls.decode_event(event);
 		if self.ui_state == UIState::InMenu
 		{
-			if let Event::KeyDown {
-				keycode: KeyCode::Escape,
-				..
-			} = event
-			{
-				state.sfx.play_sound("data/ui2.ogg").unwrap();
-				self.subscreens.pop().unwrap();
-			}
 			if let Some(action) = self
 				.subscreens
 				.last_mut()
@@ -1384,7 +1378,6 @@ impl Map
 		}
 		else
 		{
-			state.controls.decode_event(event);
 			match event
 			{
 				Event::KeyDown { keycode, .. } => match keycode

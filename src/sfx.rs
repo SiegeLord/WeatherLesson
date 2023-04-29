@@ -34,9 +34,9 @@ impl Sfx
 		let acodec = AcodecAddon::init(&audio)?;
 		let sink = Sink::new(&audio).map_err(|_| "Couldn't create audio sink".to_string())?;
 
-		Ok(Sfx {
-			sfx_volume: sfx_volume,
-			music_volume: music_volume,
+		let mut sfx = Sfx {
+			sfx_volume: 0.,
+			music_volume: 0.,
 			audio: audio,
 			acodec: acodec,
 			sink: sink,
@@ -46,7 +46,11 @@ impl Sfx
 			exclusive_sounds: vec![],
 			samples: HashMap::new(),
 			music_file: "".into(),
-		})
+		};
+		sfx.set_sfx_volume(sfx_volume);
+		sfx.set_music_volume(music_volume);
+
+		Ok(sfx)
 	}
 
 	pub fn set_music_file(&mut self, music: &str)
@@ -95,7 +99,7 @@ impl Sfx
 					.sink
 					.play_sample(
 						sample,
-						1.,
+						self.sfx_volume,
 						None,
 						thread_rng().gen_range(0.9..1.1),
 						Playmode::Once,
@@ -116,7 +120,7 @@ impl Sfx
 			.sink
 			.play_sample(
 				sample,
-				0.25 * self.sfx_volume,
+				self.sfx_volume,
 				None,
 				thread_rng().gen_range(0.9..1.1),
 				Playmode::Once,
@@ -132,7 +136,7 @@ impl Sfx
 		let sample = self.samples.get(name).unwrap();
 		let instance = self
 			.sink
-			.play_sample(sample, volume, None, 1., Playmode::Loop)
+			.play_sample(sample, self.sfx_volume * volume, None, 1., Playmode::Loop)
 			.map_err(|_| "Couldn't play sound".to_string())?;
 		Ok(instance)
 	}
@@ -148,7 +152,9 @@ impl Sfx
 			let sample = self.samples.get(name).unwrap();
 
 			let dist_sq = (sound_pos - camera_pos).norm_squared();
-			let volume = utils::clamp(self.sfx_volume * volume * 40000. / dist_sq, 0., 1.);
+			let volume = self.sfx_volume
+				* utils::clamp(self.sfx_volume * volume * 400000. / dist_sq, 0., 1.);
+			println!("volume: {}", volume);
 			let diff = sound_pos - camera_pos;
 			let pan = diff.x / (diff.x.powf(2.) + 100.0_f32.powf(2.)).sqrt();
 
@@ -179,22 +185,22 @@ impl Sfx
 			.map_err(|_| format!("Couldn't load {}", self.music_file))?;
 		new_stream.attach(&mut self.sink).unwrap();
 		//~ new_stream.set_playmode(Playmode::Loop).unwrap();
-		new_stream.set_gain(0.5 * self.music_volume).unwrap();
+		new_stream.set_gain(self.music_volume).unwrap();
 		self.stream = Some(new_stream);
 		Ok(())
 	}
 
 	pub fn set_music_volume(&mut self, new_volume: f32)
 	{
-		self.music_volume = new_volume;
+		self.music_volume = 0.2 * new_volume;
 		if let Some(stream) = self.stream.as_mut()
 		{
-			stream.set_gain(0.5 * new_volume).unwrap();
+			stream.set_gain(self.music_volume).unwrap();
 		}
 	}
 
 	pub fn set_sfx_volume(&mut self, new_volume: f32)
 	{
-		self.sfx_volume = new_volume;
+		self.sfx_volume = 0.2 * new_volume;
 	}
 }

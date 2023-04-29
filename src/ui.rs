@@ -96,11 +96,19 @@ impl Button
 					return Some(Action::SelectMe);
 				}
 			}
-			Event::KeyUp { keycode, .. } => match keycode
+			Event::KeyDown { keycode, .. } => match keycode
 			{
 				KeyCode::Enter | KeyCode::Space =>
 				{
 					if self.selected
+					{
+						state.sfx.play_sound("data/ui2.ogg").unwrap();
+						return Some(self.action.clone());
+					}
+				}
+				KeyCode::Escape =>
+				{
+					if self.action == Action::Back
 					{
 						state.sfx.play_sound("data/ui2.ogg").unwrap();
 						return Some(self.action.clone());
@@ -363,7 +371,7 @@ impl Slider
 					return Some((self.action_fn)(self.cur_pos));
 				}
 			}
-			Event::KeyUp { keycode, .. } =>
+			Event::KeyDown { keycode, .. } =>
 			{
 				let increment = if self.round_to_integer
 				{
@@ -684,7 +692,7 @@ impl WidgetList
 		{
 			match event
 			{
-				Event::KeyUp { keycode, .. } => match *keycode
+				Event::KeyDown { keycode, .. } => match *keycode
 				{
 					KeyCode::Up =>
 					{
