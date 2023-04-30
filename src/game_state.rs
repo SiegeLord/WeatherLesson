@@ -41,7 +41,7 @@ impl Default for Options
 			play_music: true,
 			vsync_method: 2,
 			sfx_volume: 1.,
-			music_volume: 0.5,
+			music_volume: 1.,
 			map_size: 4,
 			fire_start_probability: 0.1,
 			fire_spread_probability: 0.5,
