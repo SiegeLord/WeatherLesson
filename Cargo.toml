@@ -30,7 +30,7 @@ allegro_color = { version="0.0.44" }
 #allegro_color = { path = "/home/siege/Projects/RustAllegro/allegro_color" }
 
 bimap = { version="0.6.2", features = ["serde"] }
-hecs = "0.9.0"
+hecs = "0.10.3"
 slr_config = "0.0.21"
 #slr_config = { path = "/home/siege/Projects/SLRConfig/slr_config" }
 nalgebra = "0.31.1"
